@@ -105,6 +105,10 @@ architecture tb of tb_xfft_0 is
     im : std_logic_vector(IP_WIDTH-1 downto 0);
   end record;
   type T_IP_TABLE is array (0 to MAX_SAMPLES-1) of T_IP_SAMPLE;
+  
+  -- memory type
+  constant MEM_WIDTH   : integer := IP_WIDTH*2 -1;
+  type MEM_ARRAY is array(0 to  MAX_SAMPLES-1,0 to MAX_SAMPLES-1) of std_logic_vector(MEM_WIDTH downto  0);  
 
   -- Zeroed input data table, for reset and initialization
   constant IP_TABLE_CLEAR : T_IP_TABLE := (others => (re => (others => '0'),
@@ -174,7 +178,10 @@ architecture tb of tb_xfft_0 is
    signal fft_real_input_data : image_data_word;
    signal transfer_line  :  T_IP_TABLE;
    signal index_start : integer := 0;
-
+   
+   -- signals for memory
+   signal fft_mem : MEM_ARRAY;
+   
   -- Function that will be a point source  
   function read_input_stim_fr_file(signal index_start    : in integer; 
   	                               signal fft_real_input_data : in image_data_word) return T_IP_TABLE is
@@ -194,6 +201,21 @@ architecture tb of tb_xfft_0 is
   	  return result;                                              	     
   end function  read_input_stim_fr_file;
   
+  -- Function that will take opdata from a 1-D FFT run and store to memory
+  function store_fft_output_to_mem(signal fft_output : in T_IP_TABLE; signal start_index : in integer) return MEM_ARRAY is
+    variable result : MEM_ARRAY;
+    variable line_temp_int : integer;
+    variable line_int : integer;
+    constant START_ADDR : integer := 0;  
+  begin
+      line_temp_int := start_index + MAX_SAMPLES;
+      line_int := line_temp_int / MAX_SAMPLES -1;
+      for j in  START_ADDR to MAX_SAMPLES-1 loop
+         result(line_int,j) := fft_output(j).re & fft_output(j).im;     
+      end loop;
+      -- write into array data
+      return result;
+  end function store_fft_output_to_mem;
   
   -- Function to generate input data table
   -- Data is a complex sinusoid exp(-jwt) with a frequency 2.6 times the frame size
@@ -411,8 +433,9 @@ begin
     wait until rising_edge(aclk);
     wait for T_HOLD;
 
-    -- Take a copy of the result, to use later as input
-    op_data_saved := op_data;
+    -- Take a copy of the result, store this to memory for turnaround computation
+    --op_data_saved := op_data;
+    fft_mem <= store_fft_output_to_mem(op_data,index_start);
 
     -- Now perform an inverse transform on the result to get back to the original input
     -- Set up the configuration (config_stimuli process handles the config slave channel)
