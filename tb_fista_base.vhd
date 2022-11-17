@@ -414,29 +414,32 @@ begin
 
 
   begin
+    for i in 1 to 5 loop
+        -- Drive inputs T_HOLD time after rising edge of clock
+        wait until rising_edge(aclk) and aresetn = '1';
+        wait for T_HOLD;
 
-    -- Drive inputs T_HOLD time after rising edge of clock
-    wait until rising_edge(aclk) and aresetn = '1';
-    wait for T_HOLD;
-
-    -- Drive a frame of input data
-    ip_frame <= 1;
+        -- Drive a frame of input data
+        ip_frame <= 1;
        -- Need to read first N lines from input file array from file 
-    transfer_line <= read_input_stim_fr_file(index_start => index_start, fft_real_input_data => fft_real_input_data);
-    --drive_frame(IP_DATA);
-    wait until rising_edge(aclk);
-    wait for T_HOLD;
-    drive_frame(transfer_line);
+        transfer_line <= read_input_stim_fr_file(index_start => index_start, fft_real_input_data => fft_real_input_data);
+        --drive_frame(IP_DATA);
+        wait until rising_edge(aclk);
+        wait for T_HOLD;
+        drive_frame(transfer_line);
 
-    -- Allow the result to emerge
-    wait until m_axis_data_tlast = '1';
-    wait until rising_edge(aclk);
-    wait for T_HOLD;
+        -- Allow the result to emerge
+        wait until m_axis_data_tlast = '1';
+        wait until rising_edge(aclk);
+        wait for T_HOLD;
 
-    -- Take a copy of the result, store this to memory for turnaround computation
-    --op_data_saved := op_data;
-    fft_mem <= store_fft_output_to_mem(op_data,index_start);
-
+        -- Take a copy of the result, store this to memory for turnaround computation
+        --op_data_saved := op_data;
+        fft_mem <= store_fft_output_to_mem(op_data,index_start);
+        
+        -- incr index_start
+        index_start <= index_start + MAX_SAMPLES;
+    end loop;
     -- Now perform an inverse transform on the result to get back to the original input
     -- Set up the configuration (config_stimuli process handles the config slave channel)
     ip_frame <= 2;
