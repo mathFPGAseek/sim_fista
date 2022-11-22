@@ -115,11 +115,14 @@ architecture tb of tb_xfft_0 is
                                                       im => (others => '0')));
                                                      	
   -----------------------------------------------------------------------
-  -- Read File Type and constants
+  -- Read/write File Type and constants
   -----------------------------------------------------------------------                                                    	
   constant INPUT_BUFFER_SIZE : integer := 65537; -- arbitrary
   type image_data_word is array (INPUT_BUFFER_SIZE downto 0) of std_logic_vector(33 downto 0);
   file read_file : text;
+  file write_file : text;
+  type result_type is ( '0', '1');
+  signal write_done : result_type;
 
   -----------------------------------------------------------------------
   -- DUT signals
@@ -181,6 +184,38 @@ architecture tb of tb_xfft_0 is
    
    -- signals for memory
    signal fft_mem : MEM_ARRAY;
+   
+    -------------------------------------------------
+	-- Write to a file the mem contents to check
+	-------------------------------------------------
+	impure function writeToFile(  signal fft_mem   : in MEM_ARRAY) return result_type is
+	   variable result       : result_type;
+	   --file write_file       : text open write_mode is "fft_1d_mem_vectors.txt";     
+	   variable mem_line_var : line;
+	   variable done         : integer;
+	   variable data_write_var : bit_vector(67 downto 0);
+	   --variable debug_data     : std_logic_vector(67 downto 0) := (others=> '0');
+	   begin
+	     --report" Start writing to file ";
+	     file_open(write_file,"fft_1d_mem_vectors.txt",write_mode);
+	     report" File Opened for writing ";
+	          for i in  0 to MAX_SAMPLES-1 loop
+	              for j in 0 to MAX_SAMPLES-1 loop
+	                  data_write_var := to_bitvector(fft_mem(i,j));
+	                  --data_write_var := to_bitvector(debug_data);
+	                  write(mem_line_var ,data_write_var);
+	                  writeline(write_file,mem_line_var);
+	                  report" Start writing to file ";
+	              end loop;
+	          end loop;
+	          done := 1;
+	      --report" Done writing to file ";
+	      file_close(write_file);
+	      report" Done writing to file ";	  
+  	      return result;  	       
+     end function  writeToFile;
+	        
+	--     data_write_var := to_bit_vector(fft_mem)
    
   -- Function that will be a point source  
   function read_input_stim_fr_file(signal index_start    : in integer; 
@@ -327,6 +362,7 @@ begin
     end loop;
   end process clock_gen;
   
+  
     -------------------------------------------------
 	-- Read From file for psf 
 	-------------------------------------------------
@@ -452,6 +488,12 @@ begin
         -- incr index_start
         index_start <= index_start + MAX_SAMPLES;
     end loop;
+    
+    -- write to file
+    report " start writing fft 1d file";
+    write_done <= writeToFile(fft_mem);
+    wait;
+    
     -- Now perform an inverse transform on the result to get back to the original input
     -- Set up the configuration (config_stimuli process handles the config slave channel)
     ip_frame <= 2;
