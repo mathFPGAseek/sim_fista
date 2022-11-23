@@ -122,7 +122,8 @@ architecture tb of tb_xfft_0 is
   file read_file : text;
   file write_file : text;
   type result_type is ( '0', '1');
-  signal write_done : result_type;
+  signal write_line_done : result_type;
+  signal write_fft_1d_done : result_type;
 
   -----------------------------------------------------------------------
   -- DUT signals
@@ -184,6 +185,32 @@ architecture tb of tb_xfft_0 is
    
    -- signals for memory
    signal fft_mem : MEM_ARRAY;
+   
+    -------------------------------------------------
+	-- DEBUG :Write to a file for debugging
+	-------------------------------------------------
+	impure function writeToFileDebugTransferLine(  signal transfer_line  : in T_IP_TABLE) return result_type is
+	   variable result         : result_type; 
+	   variable mem_line_var   : line;
+	   variable done           : integer;
+	   variable data_write_var : bit_vector(67 downto 0);
+	   variable sample_data    : std_logic_vector(67 downto 0);
+	   begin
+	     file_open(write_file,"transfer_line_vectors.txt",write_mode);
+	     report" File Opened for writing ";
+	          for i in  0 to MAX_SAMPLES-1 loop
+	                  sample_data(33 downto 0)  := transfer_line(i).re;                  -- real data
+                      sample_data(67 downto 34) := transfer_line(i).im;                  -- imaginary data
+                      data_write_var := to_bitvector(sample_data);
+	                  write(mem_line_var ,data_write_var);
+	                  writeline(write_file,mem_line_var);
+	                  report" Start writing to file ";
+	          end loop;
+	          done := 1;
+	      file_close(write_file);
+	      report" Done writing to file ";	  
+  	      return result;  	       
+     end function  writeToFileDebugTransferLine;
    
     -------------------------------------------------
 	-- Write to a file the mem contents to check
@@ -471,6 +498,8 @@ begin
         ip_frame <= 1;
        -- Need to read first N lines from input file array from file 
         transfer_line <= read_input_stim_fr_file(index_start => index_start, fft_real_input_data => fft_real_input_data);
+        --DEBUG
+        write_line_done <= writeToFileDebugTransferLine(transfer_line); 
         --drive_frame(IP_DATA);
         wait until rising_edge(aclk);
         wait for T_HOLD;
@@ -491,7 +520,7 @@ begin
     
     -- write to file
     report " start writing fft 1d file";
-    write_done <= writeToFile(fft_mem);
+    write_fft_1d_done <= writeToFile(fft_mem);
     wait;
     
     -- Now perform an inverse transform on the result to get back to the original input
