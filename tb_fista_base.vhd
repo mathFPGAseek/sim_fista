@@ -212,35 +212,30 @@ architecture tb of tb_xfft_0 is
   	      return result;  	       
      end function  writeToFileDebugTransferLine;
    
-    -------------------------------------------------
+  -------------------------------------------------
 	-- Write to a file the mem contents to check
 	-------------------------------------------------
-	impure function writeToFile(  signal fft_mem   : in MEM_ARRAY) return result_type is
-	   variable result       : result_type;
-	   --file write_file       : text open write_mode is "fft_1d_mem_vectors.txt";     
+	impure function writeToFileMemContents(  signal fft_mem   : in MEM_ARRAY) return result_type is
+	   variable result       : result_type;    
 	   variable mem_line_var : line;
 	   variable done         : integer;
 	   variable data_write_var : bit_vector(67 downto 0);
-	   --variable debug_data     : std_logic_vector(67 downto 0) := (others=> '0');
 	   begin
-	     --report" Start writing to file ";
 	     file_open(write_file,"fft_1d_mem_vectors.txt",write_mode);
 	     report" File Opened for writing ";
 	          for i in  0 to MAX_SAMPLES-1 loop
 	              for j in 0 to MAX_SAMPLES-1 loop
 	                  data_write_var := to_bitvector(fft_mem(i,j));
-	                  --data_write_var := to_bitvector(debug_data);
 	                  write(mem_line_var ,data_write_var);
 	                  writeline(write_file,mem_line_var);
 	                  report" Start writing to file ";
 	              end loop;
 	          end loop;
-	          done := 1;
-	      --report" Done writing to file ";
+	      done := 1;
 	      file_close(write_file);
 	      report" Done writing to file ";	  
-  	      return result;  	       
-     end function  writeToFile;
+  	    return result;  	       
+     end function  writeToFileMemContents;
 	        
 	--     data_write_var := to_bit_vector(fft_mem)
    
@@ -253,7 +248,7 @@ architecture tb of tb_xfft_0 is
     variable i : integer;
   	constant MAX_SAMPLES : integer := 256;
   	begin
-  	  report " start reading input file";
+  	  --report " start reading input file";
   	  end_index := index_start + MAX_SAMPLES - 1;
   	  for i in index_start to end_index loop
   	    result(K).re := fft_real_input_data(i);
@@ -269,6 +264,7 @@ architecture tb of tb_xfft_0 is
     variable line_temp_int : integer;
     variable line_int : integer;
     variable address  : integer;
+    constant LINE_119 : integer := 119;
     type bit_rev_addr is array ( 0 to MAX_SAMPLES-1) of integer;
     variable rev_addr : bit_rev_addr := 
      (0 ,128, 64, 192,	32,	160,	96,	224,	16,	144,	80,	208,	48,	176,	112,	240,	8,	136,	72,	200,	40,	168,	104,	232,	24,	152,	88,	216,	56,	184,	120,	248,
@@ -279,13 +275,50 @@ architecture tb of tb_xfft_0 is
       5 ,133, 69, 197,	37,	165,	101,229,	21,	149,	85,	213,	53,	181,	117,	245,	13,	141,	77,	205,	45,	173,	109,	237,	29,	157,	93,	221,	61,	189,	125,	253,
       3	,131, 67, 195,	35,	163,	99,	227,	19,	147,	83,	211,	51,	179,	115,	243,	11,	139,	75,	203,	43,	171,	107,	235,	27,	155,	91,	219,	59,	187,	123,	251,
       7	,135, 71, 199,	39,	167,	103,231,	23,	151,	87,	215,	55,	183,	119,	247,	15,	143,	79,	207,	47,	175,	111,	239,	31,	159,	95,	223,	63,	191,	127,	255);
-    constant START_ADDR : integer := 0;  
+    constant START_ADDR : integer := 0; 
   begin
       line_temp_int := start_index + MAX_SAMPLES;
       line_int := line_temp_int / MAX_SAMPLES -1;
       for j in  START_ADDR to MAX_SAMPLES-1 loop
          address := rev_addr(j);
-         result(line_int,address) := fft_output(j).re & fft_output(j).im;     
+         result(line_int,address) := fft_output(j).re & fft_output(j).im;
+         --DEBUG
+         if (line_int  = LINE_119) and ( j = 1)  then
+         	  report " line_int = " & integer'image(line_int);
+         	  report " address  = " & integer'image(address);
+         	  report " *******************";
+         	  report " *******************";
+         	  report "        DEBUG       ";
+         	  report " fft real sample = " & integer'image(to_integer(unsigned(fft_output(j).re)));
+         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(fft_output(j).im)));
+         	  report " *******************";
+         	  report " *******************";
+         end if;
+         
+         if (line_int  = LINE_119) and ( j = 2)  then
+         	  report " line_int = " & integer'image(line_int);
+         	  report " address  = " & integer'image(address);
+         	  report " *******************";
+         	  report " *******************";
+         	  report "        DEBUG       ";
+         	  report " fft real sample = " & integer'image(to_integer(unsigned(fft_output(j).re)));
+         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(fft_output(j).im)));
+         	  report " *******************";
+         	  report " *******************";
+         end if;
+         	
+         if (line_int  = LINE_119) and ( j = 3)  then
+         	  report " line_int = " & integer'image(line_int);
+         	  report " address  = " & integer'image(address);
+         	  report " *******************";
+         	  report " *******************";
+         	  report "        DEBUG       ";
+         	  report " fft real sample = " & integer'image(to_integer(unsigned(fft_output(j).re)));
+         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(fft_output(j).im)));
+         	  report " *******************";
+         	  report " *******************";
+         end if;
+         	     
       end loop;
       -- write into array data
       return result;
@@ -489,7 +522,7 @@ begin
 
 
   begin
-    for i in 1 to MAX_SAMPLES loop
+    for i in 0 to MAX_SAMPLES-1 loop
         -- Drive inputs T_HOLD time after rising edge of clock
         wait until rising_edge(aclk) and aresetn = '1';
         wait for T_HOLD;
@@ -498,8 +531,7 @@ begin
         ip_frame <= 1;
        -- Need to read first N lines from input file array from file 
         transfer_line <= read_input_stim_fr_file(index_start => index_start, fft_real_input_data => fft_real_input_data);
-        --DEBUG
-        write_line_done <= writeToFileDebugTransferLine(transfer_line); 
+
         --drive_frame(IP_DATA);
         wait until rising_edge(aclk);
         wait for T_HOLD;
@@ -509,10 +541,27 @@ begin
         wait until m_axis_data_tlast = '1';
         wait until rising_edge(aclk);
         wait for T_HOLD;
+        
+        --DEBUG
+        --if i = 120 then
+        --   write_line_done <= writeToFileDebugTransferLine(op_data); 
+        --end if;
 
         -- Take a copy of the result, store this to memory for turnaround computation
         --op_data_saved := op_data;
+        -- DEBUG
+        if ( i = 119) then
+        	report " index i =" & integer'image(i);
+        	report " index_start =" & integer'image(index_start);
+        end if;
+        	
         fft_mem <= store_fft_output_to_mem(op_data,index_start);
+        
+        --DEBUG	
+        --if i = 120 then
+        --  report " start writing fft 1d file for 120th line";
+          write_fft_1d_done <= writeToFileMemContents(fft_mem);
+        --end if;
         
         -- incr index_start
         index_start <= index_start + MAX_SAMPLES;
@@ -520,7 +569,7 @@ begin
     
     -- write to file
     report " start writing fft 1d file";
-    write_fft_1d_done <= writeToFile(fft_mem);
+    --write_fft_1d_done <= writeToFileMemContents(fft_mem);
     wait;
     
     -- Now perform an inverse transform on the result to get back to the original input
@@ -725,7 +774,7 @@ begin
         -- Record output data such that it can be used as input data
         index := op_sample;
         -- Digit-reverse output sample number, to get actual sample index as outputs are in digit-reversed order
-        index := digit_reverse_int(index, 8);
+        --index := digit_reverse_int(index, 8);
         op_data(index).re <= m_axis_data_tdata(33 downto 0);
         op_data(index).im <= m_axis_data_tdata(73 downto 40);
         -- Increment output sample counter
