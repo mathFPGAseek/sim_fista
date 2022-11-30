@@ -182,9 +182,15 @@ architecture tb of tb_xfft_0 is
    signal fft_real_input_data : image_data_word;
    signal transfer_line  :  T_IP_TABLE;
    signal index_start : integer := 0;
-   
    -- signals for memory
+   signal wr_2_mem : std_logic;
+   signal lst_wr_2_mem : std_logic;
    signal fft_mem : MEM_ARRAY;
+   signal op_sample_wr_2_mem : integer := 0;
+   signal data_in_wr_2_mem: std_logic_vector(67 downto 0);
+   signal line_wr_2_mem : integer := 0;
+   signal address_int   : integer := 0;
+   constant LINE_119 : integer := 119;
    
     -------------------------------------------------
 	-- DEBUG :Write to a file for debugging
@@ -227,8 +233,8 @@ architecture tb of tb_xfft_0 is
 	              for j in 0 to MAX_SAMPLES-1 loop
 	                  data_write_var := to_bitvector(fft_mem(i,j));
 	                  write(mem_line_var ,data_write_var);
-	                  writeline(write_file,mem_line_var);
-	                  report" Start writing to file ";
+	                  writeline(write_file,mem_line_var);                  
+	                  --report" Start writing to file ";
 	              end loop;
 	          end loop;
 	      done := 1;
@@ -523,6 +529,8 @@ begin
 
   begin
     for i in 0 to MAX_SAMPLES-1 loop
+        wr_2_mem <= '0';
+        lst_wr_2_mem <= '0';
         -- Drive inputs T_HOLD time after rising edge of clock
         wait until rising_edge(aclk) and aresetn = '1';
         wait for T_HOLD;
@@ -555,21 +563,41 @@ begin
         	report " index_start =" & integer'image(index_start);
         end if;
         	
-        fft_mem <= store_fft_output_to_mem(op_data,index_start);
+        --fft_mem <= store_fft_output_to_mem(op_data,index_start);
         
         --DEBUG	
         --if i = 120 then
         --  report " start writing fft 1d file for 120th line";
-          write_fft_1d_done <= writeToFileMemContents(fft_mem);
+        --  write_fft_1d_done <= writeToFileMemContents(fft_mem);
         --end if;
         
+        -- write stored op_data into memory
+        for k in 0 to MAX_SAMPLES-2 loop
+          wait until rising_edge(aclk);
+          wr_2_mem <= '1';
+          --debug
+          if ( k = 32) and (i = 119) then
+          	report " inside for loop for writing to memory";
+          end if;
+          if k = MAX_SAMPLES-3 then
+          	wr_2_mem <= '0';
+       	    lst_wr_2_mem <= '1';
+          end if;
+        end loop;
+        wr_2_mem <= '0';
+        lst_wr_2_mem <= '0';
+  
+        -- incr line to write
+        line_wr_2_mem <= line_wr_2_mem + 1;
         -- incr index_start
         index_start <= index_start + MAX_SAMPLES;
     end loop;
-    
+
     -- write to file
     report " start writing fft 1d file";
-    --write_fft_1d_done <= writeToFileMemContents(fft_mem);
+    write_fft_1d_done <= writeToFileMemContents(fft_mem);
+    -- completed 1-d fft
+    report " completed 1-d fft";
     wait;
     
     -- Now perform an inverse transform on the result to get back to the original input
@@ -739,6 +767,91 @@ begin
     do_config := DONE;
 
   end process config_stimuli;
+  -----------------------------------------------------------------------
+  -- Store FFT outputs to memory
+  -----------------------------------------------------------------------
+  RamProc : process(aclk)
+  	    -- Function to digit-reverse an integer, to convert output to input ordering
+    function digit_reverse_int ( fwd, width : integer ) return integer is
+      variable rev     : integer;
+      variable fwd_slv : std_logic_vector(width-1 downto 0);
+      variable rev_slv : std_logic_vector(width-1 downto 0);
+    begin
+      fwd_slv := std_logic_vector(to_unsigned(fwd, width));
+      for i in 0 to width/2-1 loop  -- reverse in digit groups (2 bits at a time)
+        rev_slv(i*2+1 downto i*2) := fwd_slv(width-i*2-1 downto width-i*2-2);
+      end loop;
+      if width mod 2 = 1 then  -- width is odd: LSB moves to MSB
+        rev_slv(width-1) := fwd_slv(0);
+      end if;
+      rev := to_integer(unsigned(rev_slv));
+      return rev;
+    end function digit_reverse_int;
+
+    variable index_wr_2_mem : integer := 0;
+  	
+  begin
+  	if rising_edge(aclk) then
+  		if aresetn = '0' then
+  			op_sample_wr_2_mem    <= 0;
+  			address_int <= 0;
+  			
+  		elsif wr_2_mem = '1' then 		
+  			index_wr_2_mem := op_sample_wr_2_mem;
+  			data_in_wr_2_mem <= op_data(index_wr_2_mem).im & op_data(index_wr_2_mem).re;   
+  			index_wr_2_mem := digit_reverse_int(index_wr_2_mem, 8);
+  			address_int <= index_wr_2_mem;
+  			fft_mem(line_wr_2_mem,index_wr_2_mem) <= data_in_wr_2_mem;
+  				
+  		          --DEBUG
+         if (line_wr_2_mem  = LINE_119) and ( index_wr_2_mem = 128)  then
+         	  report " line_int = " & integer'image(line_wr_2_mem);
+         	  report " address  = " & integer'image(index_wr_2_mem);
+         	  report " *******************";
+         	  report " *******************";
+         	  report "        DEBUG       ";
+         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).re)));
+         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).im)));
+         	  report " *******************";
+         	  report " *******************";
+         end if;
+         
+         if (line_wr_2_mem  = LINE_119) and ( index_wr_2_mem = 64)  then
+         	  report " line_int = " & integer'image(line_wr_2_mem);
+         	  report " address  = " & integer'image(index_wr_2_mem);
+         	  report " *******************";
+         	  report " *******************";
+         	  report "        DEBUG       ";
+         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).re)));
+         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).im)));
+         	  report " *******************";
+         	  report " *******************";
+         end if;
+         	
+         if (line_wr_2_mem  = LINE_119) and ( index_wr_2_mem = 192)  then
+         	  report " line_int = " & integer'image(line_wr_2_mem);
+         	  report " address  = " & integer'image(index_wr_2_mem);
+         	  report " *******************";
+         	  report " *******************";
+         	  report "        DEBUG       ";
+         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).re)));
+         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).im)));
+         	  report " *******************";
+         	  report " *******************";
+         end if;
+  			
+  			op_sample_wr_2_mem <= op_sample_wr_2_mem + 1;
+  			
+  		elsif lst_wr_2_mem = '1' then 	
+  			op_sample_wr_2_mem <= 0;
+ 
+  		end if; -- wr mem
+    end if; --aclk
+   end process RamProc;
+  			
+  		
+  
+  				
 
   -----------------------------------------------------------------------
   -- Record outputs, to use later as inputs for another frame
