@@ -192,6 +192,7 @@ architecture tb of tb_xfft_0 is
    signal lst_wr_2_mem_rr : std_logic;
    signal lst_wr_2_mem_rrr : std_logic;
    signal fft_mem : MEM_ARRAY;
+   --signal fft_spec : MEM_ARRAY;
    signal op_sample_wr_2_mem : integer := 0;
    signal data_in_wr_2_mem: std_logic_vector(67 downto 0);
    signal line_wr_2_mem : integer := 0;
@@ -216,6 +217,7 @@ architecture tb of tb_xfft_0 is
        32,  33,  34, 35,   36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  47,  48,  49,  50,  51,  52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  62,  63,
        64,  65, 66,  67,   68,  69,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,  80,  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,  91,  92,  93,  94,  95,
        96,  97, 98,  99,  100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127 );
+
     -------------------------------------------------
 	-- DEBUG :Write to a file for debugging
 	-------------------------------------------------
@@ -245,17 +247,26 @@ architecture tb of tb_xfft_0 is
   -------------------------------------------------
 	-- Write to a file the mem contents to check
 	-------------------------------------------------
-	impure function writeToFileMemContents(  signal fft_mem   : in MEM_ARRAY) return result_type is
+	impure function writeToFileMemContents(  signal fft_mem   : in MEM_ARRAY;
+		                                       signal fft_bin_center_addr : in bit_addr) return result_type is
 	   variable result       : result_type;    
 	   variable mem_line_var : line;
 	   variable done         : integer;
+	   variable k            : integer;
+	   variable fft_spec     : MEM_ARRAY;
 	   variable data_write_var : bit_vector(67 downto 0);
 	   begin
+	   	 	for i in  0 to MAX_SAMPLES-1 loop
+	         for j in 0 to MAX_SAMPLES-1 loop
+	            k := fft_bin_center_addr(j);
+	            fft_spec(i,k) := (fft_mem(i,j));
+	         end loop;
+	      end loop;
 	     file_open(write_file,"fft_1d_mem_vectors.txt",write_mode);
 	     report" File Opened for writing ";
 	          for i in  0 to MAX_SAMPLES-1 loop
 	              for j in 0 to MAX_SAMPLES-1 loop
-	                  data_write_var := to_bitvector(fft_mem(i,j));
+	                  data_write_var := to_bitvector(fft_spec(i,j));
 	                  write(mem_line_var ,data_write_var);
 	                  writeline(write_file,mem_line_var);                  
 	                  --report" Start writing to file ";
@@ -622,7 +633,8 @@ begin
 
     -- write to file
     report " start writing fft 1d file";
-    write_fft_1d_done <= writeToFileMemContents(fft_mem);
+    --write_fft_1d_done <= writeToFileMemContents(fft_mem);
+    write_fft_1d_done <= writeToFileMemContents(fft_mem,fft_bin_center_addr);
     -- completed 1-d fft
     report " completed 1-d fft";
     wait;
