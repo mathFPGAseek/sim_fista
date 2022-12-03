@@ -185,13 +185,35 @@ architecture tb of tb_xfft_0 is
    -- signals for memory
    signal wr_2_mem : std_logic;
    signal lst_wr_2_mem : std_logic;
+   signal wr_2_mem_r : std_logic;
+   signal wr_2_mem_rr : std_logic;
+   signal lst_wr_2_mem_r : std_logic;
+   signal lst_wr_2_mem_rr : std_logic;
    signal fft_mem : MEM_ARRAY;
    signal op_sample_wr_2_mem : integer := 0;
    signal data_in_wr_2_mem: std_logic_vector(67 downto 0);
    signal line_wr_2_mem : integer := 0;
    signal address_int   : integer := 0;
    constant LINE_119 : integer := 119;
-   
+   type bit_addr is array ( 0 to MAX_SAMPLES-1) of integer;
+   signal rev_addr : bit_addr := 
+     (0 ,128, 64, 192,	32,	160,	96,	224,	16,	144,	80,	208,	48,	176,	112,	240,	8,	136,	72,	200,	40,	168,	104,	232,	24,	152,	88,	216,	56,	184,	120,	248,
+      4	,132, 68, 196,	36,	164,	100,228,	20,	148,	84,	212,	52,	180,	116,	244,	12,	140,	76,	204,	44,	172,	108,	236,	28,	156,	92,	220,	60,	188,	124,	252,
+      2	,130, 66, 194,	34,	162,	98,	226,	18,	146,	82,	210,	50,	178,	114,	242,	10,	138,	74,	202,	42,	170,	106,	234,	26,	154,	90,	218,	58,	186,	122,	250,
+      6	,134, 70, 198,	38,	166,	102,230,	22,	150,	86,	214,	54,	182,	118,	246,	14,	142,	78,	206,	46,	174,	110,	238,	30,	158,	94,	222,	62,	190,	126,	254,
+      1	,129, 65, 193,	33,	161,	97,	225,	17,	145,	81,	209,	49,	177,	113,	241,	9,	137,	73,	201,	41,	169,	105,	233,	25,	153,	89,	217,	57,	185,	121,	249,
+      5 ,133, 69, 197,	37,	165,	101,229,	21,	149,	85,	213,	53,	181,	117,	245,	13,	141,	77,	205,	45,	173,	109,	237,	29,	157,	93,	221,	61,	189,	125,	253,
+      3	,131, 67, 195,	35,	163,	99,	227,	19,	147,	83,	211,	51,	179,	115,	243,	11,	139,	75,	203,	43,	171,	107,	235,	27,	155,	91,	219,	59,	187,	123,	251,
+      7	,135, 71, 199,	39,	167,	103,231,	23,	151,	87,	215,	55,	183,	119,	247,	15,	143,	79,	207,	47,	175,	111,	239,	31,	159,	95,	223,	63,	191,	127,	255);
+   signal fft_bin_center_addr : bit_addr :=
+     (128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
+      160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191,
+      192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
+      224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 243, 222, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255,
+        0,   1,   2,  3,    4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  31,
+       32,  33,  34, 35,   36,  37,  38,  39,  40,  41,  42,  43,  44,  45,  46,  47,  48,  49,  50,  51,  52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  62,  63,
+       64,  65, 66,  67,   68,  69,  70,  71,  72,  73,  74,  75,  76,  77,  78,  79,  80,  81,  82,  83,  84,  85,  86,  87,  88,  89,  90,  91,  92,  93,  94,  95,
+       96,  97, 98,  99,  100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127 );
     -------------------------------------------------
 	-- DEBUG :Write to a file for debugging
 	-------------------------------------------------
@@ -572,18 +594,19 @@ begin
         --end if;
         
         -- write stored op_data into memory
-        for k in 0 to MAX_SAMPLES-2 loop
+        for k in 0 to MAX_SAMPLES-1 loop
           wait until rising_edge(aclk);
           wr_2_mem <= '1';
           --debug
           if ( k = 32) and (i = 119) then
           	report " inside for loop for writing to memory";
           end if;
-          if k = MAX_SAMPLES-3 then
-          	wr_2_mem <= '0';
-       	    lst_wr_2_mem <= '1';
-          end if;
-        end loop;
+  
+        end loop;     
+        wait until rising_edge(aclk);
+        wr_2_mem <= '0';
+       	lst_wr_2_mem <= '1';
+       	wait until rising_edge(aclk);
         wr_2_mem <= '0';
         lst_wr_2_mem <= '0';
   
@@ -768,7 +791,7 @@ begin
 
   end process config_stimuli;
   -----------------------------------------------------------------------
-  -- Store FFT outputs to memory
+  -- Store FFT outputs to memory; We are reading an array built by  process record_outputs
   -----------------------------------------------------------------------
   RamProc : process(aclk)
   	    -- Function to digit-reverse an integer, to convert output to input ordering
@@ -788,7 +811,7 @@ begin
       return rev;
     end function digit_reverse_int;
 
-    variable index_wr_2_mem : integer := 0;
+    --variable index_wr_2_mem : integer := 0;
   	
   begin
   	if rising_edge(aclk) then
@@ -796,62 +819,78 @@ begin
   			op_sample_wr_2_mem    <= 0;
   			address_int <= 0;
   			
-  		elsif wr_2_mem = '1' then 		
-  			index_wr_2_mem := op_sample_wr_2_mem;
-  			data_in_wr_2_mem <= op_data(index_wr_2_mem).im & op_data(index_wr_2_mem).re;   
-  			index_wr_2_mem := digit_reverse_int(index_wr_2_mem, 8);
-  			address_int <= index_wr_2_mem;
-  			fft_mem(line_wr_2_mem,index_wr_2_mem) <= data_in_wr_2_mem;
+  		elsif wr_2_mem_rr = '1' then 		
+  			--index_wr_2_mem := op_sample_wr_2_mem;
+  			data_in_wr_2_mem <= op_data(op_sample_wr_2_mem).im & op_data(op_sample_wr_2_mem).re;   
+  			--index_wr_2_mem := digit_reverse_int(index_wr_2_mem, 8);
+  			address_int <= rev_addr(op_sample_wr_2_mem);
+  			fft_mem(line_wr_2_mem,address_int) <= data_in_wr_2_mem;
   				
   		          --DEBUG
-         if (line_wr_2_mem  = LINE_119) and ( index_wr_2_mem = 128)  then
+         if (line_wr_2_mem  = LINE_119) and ( address_int = 128)  then
          	  report " line_int = " & integer'image(line_wr_2_mem);
-         	  report " address  = " & integer'image(index_wr_2_mem);
+         	  report " address  = " & integer'image(address_int);
          	  report " *******************";
          	  report " *******************";
          	  report "        DEBUG       ";
-         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).re)));
-         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).im)));
+         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(address_int).re)));
+         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(address_int).im)));
          	  report " *******************";
          	  report " *******************";
          end if;
          
-         if (line_wr_2_mem  = LINE_119) and ( index_wr_2_mem = 64)  then
+         if (line_wr_2_mem  = LINE_119) and ( address_int = 64)  then
          	  report " line_int = " & integer'image(line_wr_2_mem);
-         	  report " address  = " & integer'image(index_wr_2_mem);
+         	  report " address  = " & integer'image(address_int);
          	  report " *******************";
          	  report " *******************";
          	  report "        DEBUG       ";
-         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).re)));
-         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).im)));
+         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(address_int).re)));
+         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(address_int).im)));
          	  report " *******************";
          	  report " *******************";
          end if;
          	
-         if (line_wr_2_mem  = LINE_119) and ( index_wr_2_mem = 192)  then
+         if (line_wr_2_mem  = LINE_119) and ( address_int = 192)  then
          	  report " line_int = " & integer'image(line_wr_2_mem);
-         	  report " address  = " & integer'image(index_wr_2_mem);
+         	  report " address  = " & integer'image(address_int);
          	  report " *******************";
          	  report " *******************";
          	  report "        DEBUG       ";
-         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).re)));
-         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(index_wr_2_mem).im)));
+         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(address_int).re)));
+         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(address_int).im)));
          	  report " *******************";
          	  report " *******************";
          end if;
   			
   			op_sample_wr_2_mem <= op_sample_wr_2_mem + 1;
   			
-  		elsif lst_wr_2_mem = '1' then 	
+  		elsif lst_wr_2_mem_rr = '1' then 	
   			op_sample_wr_2_mem <= 0;
  
   		end if; -- wr mem
     end if; --aclk
    end process RamProc;
-  			
-  		
-  
-  				
+   
+  -----------------------------------------------------------------------
+  -- Ancillary delays 
+  -----------------------------------------------------------------------			
+  del_wr_registers : process(aclk)
+  	begin
+  		if aresetn = '0' then
+  			wr_2_mem_r        <= '0';
+  			wr_2_mem_rr       <= '0';
+  			lst_wr_2_mem_r    <= '0';
+  			lst_wr_2_mem_rr   <= '0';
+  	 
+  	elsif( aclk'event and aclk = '1') then
+  		  wr_2_mem_r       <= wr_2_mem;
+  		  wr_2_mem_rr      <= wr_2_mem_r;
+  		  lst_wr_2_mem_r   <= lst_wr_2_mem;
+  		  lst_wr_2_mem_rr  <= lst_wr_2_mem_r;
+  	
+    end if;
+  end process del_wr_registers;			
 
   -----------------------------------------------------------------------
   -- Record outputs, to use later as inputs for another frame
