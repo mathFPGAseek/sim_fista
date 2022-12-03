@@ -187,8 +187,10 @@ architecture tb of tb_xfft_0 is
    signal lst_wr_2_mem : std_logic;
    signal wr_2_mem_r : std_logic;
    signal wr_2_mem_rr : std_logic;
+   signal wr_2_mem_rrr: std_logic;
    signal lst_wr_2_mem_r : std_logic;
    signal lst_wr_2_mem_rr : std_logic;
+   signal lst_wr_2_mem_rrr : std_logic;
    signal fft_mem : MEM_ARRAY;
    signal op_sample_wr_2_mem : integer := 0;
    signal data_in_wr_2_mem: std_logic_vector(67 downto 0);
@@ -609,6 +611,8 @@ begin
        	wait until rising_edge(aclk);
         wr_2_mem <= '0';
         lst_wr_2_mem <= '0';
+        wait until rising_edge(aclk);
+        wait until rising_edge(aclk);
   
         -- incr line to write
         line_wr_2_mem <= line_wr_2_mem + 1;
@@ -790,41 +794,19 @@ begin
     do_config := DONE;
 
   end process config_stimuli;
-  -----------------------------------------------------------------------
+    -----------------------------------------------------------------------
   -- Store FFT outputs to memory; We are reading an array built by  process record_outputs
   -----------------------------------------------------------------------
-  RamProc : process(aclk)
-  	    -- Function to digit-reverse an integer, to convert output to input ordering
-    function digit_reverse_int ( fwd, width : integer ) return integer is
-      variable rev     : integer;
-      variable fwd_slv : std_logic_vector(width-1 downto 0);
-      variable rev_slv : std_logic_vector(width-1 downto 0);
-    begin
-      fwd_slv := std_logic_vector(to_unsigned(fwd, width));
-      for i in 0 to width/2-1 loop  -- reverse in digit groups (2 bits at a time)
-        rev_slv(i*2+1 downto i*2) := fwd_slv(width-i*2-1 downto width-i*2-2);
-      end loop;
-      if width mod 2 = 1 then  -- width is odd: LSB moves to MSB
-        rev_slv(width-1) := fwd_slv(0);
-      end if;
-      rev := to_integer(unsigned(rev_slv));
-      return rev;
-    end function digit_reverse_int;
-
-    --variable index_wr_2_mem : integer := 0;
+  RamProcData : process(aclk)
   	
   begin
   	if rising_edge(aclk) then
   		if aresetn = '0' then
-  			op_sample_wr_2_mem    <= 0;
-  			address_int <= 0;
-  			
-  		elsif wr_2_mem_rr = '1' then 		
-  			--index_wr_2_mem := op_sample_wr_2_mem;
-  			data_in_wr_2_mem <= op_data(op_sample_wr_2_mem).im & op_data(op_sample_wr_2_mem).re;   
-  			--index_wr_2_mem := digit_reverse_int(index_wr_2_mem, 8);
-  			address_int <= rev_addr(op_sample_wr_2_mem);
-  			fft_mem(line_wr_2_mem,address_int) <= data_in_wr_2_mem;
+  			data_in_wr_2_mem <= (Others => '0');
+  		elsif wr_2_mem_rrr = '1' then 		
+  			--data_in_wr_2_mem <= op_data(address_int).im & op_data(address_int).re;   
+  			--fft_mem(line_wr_2_mem,address_int) <= data_in_wr_2_mem;
+  			fft_mem(line_wr_2_mem,address_int) <= op_data(address_int).im & op_data(address_int).re;   
   				
   		          --DEBUG
          if (line_wr_2_mem  = LINE_119) and ( address_int = 128)  then
@@ -862,7 +844,22 @@ begin
          	  report " *******************";
          	  report " *******************";
          end if;
+
+  		end if; -- wr mem
+    end if; --aclk
+   end process RamProcData;
+  -----------------------------------------------------------------------
+  -- Calculate Adr to Store FFT outputs to memory; 
+  -----------------------------------------------------------------------
+  RamProcAdr : process(aclk)
+  begin
+  	if rising_edge(aclk) then
+  		if aresetn = '0' then
+  			op_sample_wr_2_mem    <= 0;
+  			address_int           <= 0;
   			
+  		elsif wr_2_mem_rr = '1' then 		
+  			address_int <= rev_addr(op_sample_wr_2_mem);				
   			op_sample_wr_2_mem <= op_sample_wr_2_mem + 1;
   			
   		elsif lst_wr_2_mem_rr = '1' then 	
@@ -870,7 +867,7 @@ begin
  
   		end if; -- wr mem
     end if; --aclk
-   end process RamProc;
+   end process RamProcAdr;
    
   -----------------------------------------------------------------------
   -- Ancillary delays 
@@ -880,14 +877,18 @@ begin
   		if aresetn = '0' then
   			wr_2_mem_r        <= '0';
   			wr_2_mem_rr       <= '0';
+  			wr_2_mem_rrr      <= '0';
   			lst_wr_2_mem_r    <= '0';
   			lst_wr_2_mem_rr   <= '0';
+  			lst_wr_2_mem_rrr  <= '0';
   	 
   	elsif( aclk'event and aclk = '1') then
   		  wr_2_mem_r       <= wr_2_mem;
   		  wr_2_mem_rr      <= wr_2_mem_r;
+  		  wr_2_mem_rrr     <= wr_2_mem_rr;
   		  lst_wr_2_mem_r   <= lst_wr_2_mem;
   		  lst_wr_2_mem_rr  <= lst_wr_2_mem_r;
+  		  lst_wr_2_mem_rrr  <= lst_wr_2_mem_rr;
   	
     end if;
   end process del_wr_registers;			
