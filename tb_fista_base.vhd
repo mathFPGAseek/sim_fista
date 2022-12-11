@@ -937,11 +937,26 @@ begin
         op_data         <= IP_TABLE_CLEAR;
       elsif m_axis_data_tvalid = '1' and m_axis_data_tready = '1' then
         -- Record output data such that it can be used as input data
-        index := op_sample;
+        --index := op_sample;
         -- Digit-reverse output sample number, to get actual sample index as outputs are in digit-reversed order
         --index := digit_reverse_int(index, 8);
-        op_data(index).re <= m_axis_data_tdata(33 downto 0);
-        op_data(index).im <= m_axis_data_tdata(73 downto 40);
+        --op_data(index).re <= m_axis_data_tdata(33 downto 0);
+        --op_data(index).im <= m_axis_data_tdata(73 downto 40);
+          op_data(op_sample).re <= m_axis_data_tdata(33 downto 0);
+          op_data(op_sample).im <= m_axis_data_tdata(73 downto 40);
+          		          --DEBUG
+         if (line_wr_2_mem  = LINE_119)  then
+
+         	  report " *******************";
+         	  report " *******************";
+         	  report " DEBUG/REcord Output";
+         	  report " Line ="             & integer'image(line_wr_2_mem );
+            report " Address ="          & integer'image(op_sample);
+         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(op_sample).re)));
+         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(op_sample).im)));
+         	  report " *******************";
+         	  report " *******************";
+         end if;
         -- Increment output sample counter
         if m_axis_data_tlast = '1' then  -- end of output frame: reset sample counter and increment frame counter
           op_sample <= 0;
