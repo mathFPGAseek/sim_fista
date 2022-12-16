@@ -125,6 +125,7 @@ architecture tb of tb_xfft_0 is
   signal write_line_done : result_type;
   signal write_fft_1d_done : result_type;
   signal write_fft_1d_seq_done : result_type;
+  signal write_fft_1d_raw_done : result_type;
 
   -----------------------------------------------------------------------
   -- DUT signals
@@ -183,7 +184,8 @@ architecture tb of tb_xfft_0 is
    signal fft_real_input_data : image_data_word;
    signal transfer_line  :  T_IP_TABLE;
    signal index_start : integer := 0;
-   -- signals for memory
+   
+   -- shared signals for memory
    signal wr_2_mem : std_logic;
    signal lst_wr_2_mem : std_logic;
    signal wr_2_mem_r : std_logic;
@@ -192,12 +194,20 @@ architecture tb of tb_xfft_0 is
    signal lst_wr_2_mem_r : std_logic;
    signal lst_wr_2_mem_rr : std_logic;
    signal lst_wr_2_mem_rrr : std_logic;
-   signal fft_mem : MEM_ARRAY;
-   --signal fft_spec : MEM_ARRAY;
-   signal op_sample_wr_2_mem : integer := 0;
-   signal data_in_wr_2_mem: std_logic_vector(67 downto 0);
+   signal data_in_wr_2_mem: std_logic_vector(67 downto 0); -- don't care?
    signal line_wr_2_mem : integer := 0;
+   	
+   
+   -- Specific memories
+   signal fft_mem : MEM_ARRAY;
+   signal op_sample_wr_2_mem : integer := 0;
    signal address_int   : integer := 0;
+   
+   signal fft_raw_mem : MEM_ARRAY;
+   signal op_sample_wr_2_raw_mem : integer := 0;
+   signal address_raw_int   : integer := 0;
+   
+   --constant and types
    constant LINE_119 : integer := 119;
    type bit_addr is array ( 0 to MAX_SAMPLES-1) of integer;
    signal rev_addr : bit_addr := 
@@ -253,8 +263,41 @@ architecture tb of tb_xfft_0 is
 	      report" Done writing to file ";	  
   	      return result;  	       
      end function  writeToFileDebugTransferLine;
+  -------------------------------------------------
+	-- Write to a file the mem contents to check
+	-------------------------------------------------
+	impure function writeToFileMemRawContents(  signal fft_mem   : in MEM_ARRAY;
+		                                       signal fft_bin_center_addr : in bit_addr) return result_type is
+	   variable result       : result_type;    
+	   variable mem_line_var : line;
+	   variable done         : integer;
+	   variable k            : integer;
+	   variable fft_spec     : MEM_ARRAY;
+	   variable data_write_var : bit_vector(67 downto 0);
+	   begin
+	   	 	for i in  0 to MAX_SAMPLES-1 loop
+	         for j in 0 to MAX_SAMPLES-1 loop
+	            k := fft_bin_center_addr(j);
+	            fft_spec(i,k) := (fft_mem(i,j));
+	         end loop;
+	      end loop;
+	     file_open(write_file,"fft_1d_mem_raw_vectors.txt",write_mode);
+	     report" File Opened for writing ";
+	          for i in  0 to MAX_SAMPLES-1 loop
+	              for j in 0 to MAX_SAMPLES-1 loop
+	                  data_write_var := to_bitvector(fft_spec(i,j));
+	                  write(mem_line_var ,data_write_var);
+	                  writeline(write_file,mem_line_var);                  
+	                  --report" Start writing to file ";
+	              end loop;
+	          end loop;
+	      done := 1;
+	      file_close(write_file);
+	      report" Done writing to file ";	  
+  	    return result;  	       
+     end function  writeToFileMemRawContents;
      
-    -------------------------------------------------
+  -------------------------------------------------
 	-- Write to a file the mem contents to check
 	-------------------------------------------------
 	impure function writeToFileMemSeqContents(  signal fft_mem   : in MEM_ARRAY;
@@ -679,6 +722,9 @@ begin
     report " start writing fft 1d file";
     
     --write to file the reordered sequence
+    write_fft_1d_raw_done <= writeToFileMemRawContents(fft_raw_mem,fft_bin_seq_addr);
+    
+    --write to file the reordered sequence
     write_fft_1d_seq_done <= writeToFileMemSeqContents(fft_mem,fft_bin_seq_addr);
     	
     --write_fft_1d_done <= writeToFileMemContents(fft_mem);
@@ -854,6 +900,41 @@ begin
     do_config := DONE;
 
   end process config_stimuli;
+      -----------------------------------------------------------------------
+  -- Store FFT outputs to memory; We are reading an array built by  process record_outputs
+  -----------------------------------------------------------------------
+  RamProcRawData : process(aclk)
+  	
+  begin
+  	if rising_edge(aclk) then
+  		if aresetn = '0' then
+  			data_in_wr_2_mem <= (Others => '0'); -- don't care
+  		elsif wr_2_mem_rrr = '1' then 		
+  			fft_raw_mem(line_wr_2_mem,address_raw_int) <= op_data(address_raw_int).im & op_data(address_raw_int).re; 
+  				  
+  		end if; -- wr mem
+    end if; --aclk
+   end process RamProcRawData;
+  -----------------------------------------------------------------------
+  -- Calculate Adr to Store FFT outputs to memory; 
+  -----------------------------------------------------------------------
+  RamProcRawAdr : process(aclk)
+  begin
+  	if rising_edge(aclk) then
+  		if aresetn = '0' then
+  			op_sample_wr_2_raw_mem    <= 0;
+  			address_raw_int           <= 0;
+  			
+  		elsif wr_2_mem_rr = '1' then 		
+  			address_raw_int <= op_sample_wr_2_raw_mem;				
+  			op_sample_wr_2_raw_mem <= op_sample_wr_2_raw_mem + 1;
+  			
+  		elsif lst_wr_2_mem_rr = '1' then 	
+  			op_sample_wr_2_raw_mem <= 0;
+ 
+  		end if; -- wr mem
+    end if; --aclk
+   end process RamProcRawAdr;
     -----------------------------------------------------------------------
   -- Store FFT outputs to memory; We are reading an array built by  process record_outputs
   -----------------------------------------------------------------------
