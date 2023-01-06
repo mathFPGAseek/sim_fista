@@ -321,8 +321,8 @@ architecture tb of tb_xfft_0 is
 	      end loop;
 	     file_open(write_file,"fft_A_forward_2d_mem_raw_vectors.txt",write_mode);
 	     report" File Opened for writing ";
-	          for i in  0 to MAX_SAMPLES-1 loop
-	              for j in 0 to MAX_SAMPLES-1 loop
+	          for j in  0 to MAX_SAMPLES-1 loop
+	              for i in 0 to MAX_SAMPLES-1 loop
 	                  data_write_var := to_bitvector(fft_spec(i,j));
 	                  write(mem_line_var ,data_write_var);
 	                  writeline(write_file,mem_line_var);                  
