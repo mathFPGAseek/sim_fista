@@ -541,7 +541,7 @@ begin
 		wait;
 	end process ; -- readInputStim
 	
-    readInputVHadmardStim : process
+    readInputImagVHadmardStim : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -559,10 +559,10 @@ begin
 		end loop;
 		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
 		wait;
-	end process ; -- readInputStim
+	end process ; -- readInputStim.
 
      
-    readInputHHadmardStim : process
+     readInputRealVHadmardStim : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -570,7 +570,7 @@ begin
 		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
 	begin
 		report "Entered Read input process: " severity note;
-		file_open(read_H_hadmard_A_forward_file,"H_psf_hadmard_vectors.txt",read_mode); -- renamed from matlab
+		file_open(read_H_hadmard_A_forward_file,"real_A_forward_V_hadmard_vector.txt",read_mode); -- renamed from matlab
 		command_loop : while not endfile(read_H_hadmard_A_forward_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
 			readline(read_H_hadmard_A_forward_file,inputLine);
 			read(inputLine,data_bit_sample);
