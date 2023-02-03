@@ -122,6 +122,8 @@ architecture tb of tb_xfft_0 is
   file read_file : text;
   file read_imag_a_2d_forward_file : text;
   file read_real_a_2d_forward_file : text;
+  file read_V_hadmard_A_forward_file : text;
+  file read_H_hadmard_A_forward_file : text;
   file write_file : text;
   type result_type is ( '0', '1');
   signal write_line_done : result_type;
@@ -191,6 +193,9 @@ architecture tb of tb_xfft_0 is
    
    signal fft_real_A_forward_2d_input_data : image_data_word;
    signal fft_imag_A_forward_2d_input_data : image_data_word;
+   
+   signal V_hadmard_A_forward_2d_input_data : image_data_word;
+   signal H_hadmard_A_forward_2d_input_data : image_data_word;
    
    -- shared signals for memory
    signal wr_2_mem : std_logic;
@@ -535,7 +540,47 @@ begin
 		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
 		wait;
 	end process ; -- readInputStim
+	
+    readInputVHadmardStim : process
+		variable inputLine : line;
+		variable data_bit_sample : bit_vector(33 downto 0);
+		variable data_slv_sample : std_logic_vector(33 downto 0);
+		variable I : integer := 0;
+		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
+	begin
+		report "Entered Read input process: " severity note;
+		file_open(read_V_hadmard_A_forward_file,"imag_A_forward_V_hadmard_vector.txt",read_mode);
+		command_loop : while not endfile(read_V_hadmard_A_forward_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_V_hadmard_A_forward_file,inputLine);
+			read(inputLine,data_bit_sample);
+			data_slv_sample := to_stdlogicvector(data_bit_sample);
+			V_hadmard_A_forward_2d_input_data(I) <= data_slv_sample;
+			I := I + 1;
+		end loop;
+		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
+		wait;
+	end process ; -- readInputStim
 
+     
+    readInputHHadmardStim : process
+		variable inputLine : line;
+		variable data_bit_sample : bit_vector(33 downto 0);
+		variable data_slv_sample : std_logic_vector(33 downto 0);
+		variable I : integer := 0;
+		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
+	begin
+		report "Entered Read input process: " severity note;
+		file_open(read_H_hadmard_A_forward_file,"H_psf_hadmard_vectors.txt",read_mode); -- renamed from matlab
+		command_loop : while not endfile(read_H_hadmard_A_forward_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_H_hadmard_A_forward_file,inputLine);
+			read(inputLine,data_bit_sample);
+			data_slv_sample := to_stdlogicvector(data_bit_sample);
+			H_hadmard_A_forward_2d_input_data(I) <= data_slv_sample;
+			I := I + 1;
+		end loop;
+		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
+		wait;
+	end process ; -- readInputStim.
   -----------------------------------------------------------------------
   -- Generate data slave channel inputs
   -----------------------------------------------------------------------
