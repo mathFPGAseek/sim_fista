@@ -122,8 +122,10 @@ architecture tb of tb_xfft_0 is
   file read_file : text;
   file read_imag_a_2d_forward_file : text;
   file read_real_a_2d_forward_file : text;
-  file read_V_hadmard_A_forward_file : text;
-  file read_H_hadmard_A_forward_file : text;
+  file read_imag_V_hadmard_A_forward_file : text;
+  file read_real_V_hadmard_A_forward_file : text;
+  file read_imag_H_hadmard_A_forward_file : text;
+  file read_real_H_hadmard_A_forward_file : text;
   file write_file : text;
   type result_type is ( '0', '1');
   signal write_line_done : result_type;
@@ -134,9 +136,9 @@ architecture tb of tb_xfft_0 is
   signal write_fft_2d_raw_done : result_type;
 
   -----------------------------------------------------------------------
-  -- DUT signals
+  -- DUT  FFT signals
   -----------------------------------------------------------------------
-
+ 
   -- General signals
   signal aclk                        : std_logic := '0';  -- the master clock
   signal aresetn                     : std_logic := '1';  -- synchronous active low reset
@@ -165,6 +167,7 @@ architecture tb of tb_xfft_0 is
   signal event_status_channel_halt   : std_logic := '0';
   signal event_data_in_channel_halt  : std_logic := '0';
   signal event_data_out_channel_halt : std_logic := '0';
+  
 
   -----------------------------------------------------------------------
   -- Aliases for AXI channel TDATA and TUSER fields
@@ -184,6 +187,17 @@ architecture tb of tb_xfft_0 is
   -- Data master channel alias signals
   signal m_axis_data_tdata_re             : std_logic_vector(33 downto 0) := (others => '0');  -- real data
   signal m_axis_data_tdata_im             : std_logic_vector(33 downto 0) := (others => '0');  -- imaginary data
+  
+  -----------------------------------------------------------------------
+  -- DUT  Hadmard signals
+  -----------------------------------------------------------------------
+    
+  signal   s_axis_v_hadmard_tvalid   : std_logic;
+  signal   s_axis_v_hadmard_tdata    : std_logic_vector(79 downto 0);
+  signal   s_axis_h_hadmard_tvalid   : std_logic;
+  signal   s_axis_h_hadmard_tdata    : std_logic_vector(79 downto 0);
+  signal   m_axis_dout_tvalid        : std_logic;
+  signal   m_axis_dout_tdata         : std_logic_vector(79 downto 0);
 
 
   -- signal  to help trasfer fr file to input vectors for fft
@@ -194,8 +208,12 @@ architecture tb of tb_xfft_0 is
    signal fft_real_A_forward_2d_input_data : image_data_word;
    signal fft_imag_A_forward_2d_input_data : image_data_word;
    
-   signal V_hadmard_A_forward_2d_input_data : image_data_word;
-   signal H_hadmard_A_forward_2d_input_data : image_data_word;
+   signal hadmard_A_forward_imag_V_input_data : image_data_word;
+   signal hadmard_A_forward_real_V_input_data : image_data_word;
+   --signal V_hadmard_A_forward_2d_input_data : image_data_word;
+   signal hadmard_A_forward_imag_H_input_data : image_data_word;
+   signal hadmard_A_forward_real_H_input_data : image_data_word;
+   
    
    -- shared signals for memory
    signal wr_2_mem : std_logic;
@@ -378,6 +396,27 @@ architecture tb of tb_xfft_0 is
   	  return result;                                              	     
   end function  read_input_stim_re_and_imag_fr_file;
   
+  function read_input_stim_re_and_imag_H_A_fr_file(signal index_start    : in integer; 
+  	                               signal hadmard_A_forward_real_H_input_data : in image_data_word;
+  	                               signal hadmard_A_forward_imag_H_input_data : in image_data_word) return T_IP_TABLE is
+    variable result : T_IP_TABLE;	
+    variable end_index : integer;
+    variable K : integer := 0;
+    variable i : integer;
+  	constant MAX_SAMPLES : integer := 256;
+  	begin
+  	  ---report " start reading input file";
+  	  end_index := index_start + MAX_SAMPLES - 1;
+  	  for i in index_start to end_index loop
+  	    result(K).re := hadmard_A_forward_real_H_input_data(i);
+  	    result(K).im := hadmard_A_forward_imag_H_input_data(i);
+  	    K := K + 1;	  	  
+  	  end loop;
+  	  return result;                                              	     
+  end function  read_input_stim_re_and_imag_H_A_fr_file;
+  
+  
+  
   
   -- Function to generate input data table
   -- Data is a complex sinusoid exp(-jwt) with a frequency 2.6 times the frame size
@@ -438,7 +477,7 @@ begin
   
   -- Add a normalization block ??
 
-  dut : entity work.xfft_0
+  dut_fft : entity work.xfft_0
     port map (
       aclk                        => aclk,
       aresetn                     => aresetn,
@@ -460,6 +499,19 @@ begin
       event_data_in_channel_halt  => event_data_in_channel_halt,
       event_data_out_channel_halt => event_data_out_channel_halt
       );
+      
+  dut_hadmard_mult_0 : entity work.cmpy_0 
+  port map( 
+    aclk                          => aclk,                     --in STD_LOGIC;
+    aresetn                       => aresetn,                  --in STD_LOGIC; 
+    s_axis_a_tvalid               => s_axis_v_hadmard_tvalid,  --in STD_LOGIC;
+    s_axis_a_tdata                => s_axis_v_hadmard_tdata,   --in STD_LOGIC_VECTOR ( 79 downto 0 );
+    s_axis_b_tvalid               => s_axis_h_hadmard_tvalid,  --in STD_LOGIC;
+    s_axis_b_tdata                => s_axis_h_hadmard_tdata,   --in STD_LOGIC_VECTOR ( 79 downto 0 );
+    m_axis_dout_tvalid            => m_axis_dout_tvalid,       --out STD_LOGIC;
+    m_axis_dout_tdata             => m_axis_dout_tdata         --out STD_LOGIC_VECTOR ( 79 downto 0 )
+  );
+
 
   -----------------------------------------------------------------------
   -- Generate clock
@@ -541,6 +593,46 @@ begin
 		wait;
 	end process ; -- readInputStim
 	
+   readInputImagHHadmardStim : process
+		variable inputLine : line;
+		variable data_bit_sample : bit_vector(33 downto 0);
+		variable data_slv_sample : std_logic_vector(33 downto 0);
+		variable I : integer := 0;
+		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
+	begin
+		report "Entered Read input process: " severity note;
+		file_open(read_imag_H_hadmard_A_forward_file,"2d_imag_H_psf_vectors.txt",read_mode);
+		command_loop : while not endfile(read_imag_H_hadmard_A_forward_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_imag_H_hadmard_A_forward_file,inputLine);
+			read(inputLine,data_bit_sample);
+			data_slv_sample := to_stdlogicvector(data_bit_sample);
+			hadmard_A_forward_imag_H_input_data(I) <= data_slv_sample;
+			I := I + 1;
+		end loop;
+		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
+		wait;
+	end process ; -- readInputStim.
+	
+    readInputRealHHadmardStim : process
+		variable inputLine : line;
+		variable data_bit_sample : bit_vector(33 downto 0);
+		variable data_slv_sample : std_logic_vector(33 downto 0);
+		variable I : integer := 0;
+		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
+	begin
+		report "Entered Read input process: " severity note;
+		file_open(read_real_H_hadmard_A_forward_file,"2d_real_H_psf_vectors.txt",read_mode);
+		command_loop : while not endfile(read_real_H_hadmard_A_forward_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_real_H_hadmard_A_forward_file,inputLine);
+			read(inputLine,data_bit_sample);
+			data_slv_sample := to_stdlogicvector(data_bit_sample);
+			hadmard_A_forward_real_H_input_data(I) <= data_slv_sample;
+			I := I + 1;
+		end loop;
+		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
+		wait;
+	end process ; -- readInputStim.
+	
     readInputImagVHadmardStim : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
@@ -549,12 +641,12 @@ begin
 		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
 	begin
 		report "Entered Read input process: " severity note;
-		file_open(read_V_hadmard_A_forward_file,"imag_A_forward_V_hadmard_vector.txt",read_mode);
-		command_loop : while not endfile(read_V_hadmard_A_forward_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
-			readline(read_V_hadmard_A_forward_file,inputLine);
+		file_open(read_imag_V_hadmard_A_forward_file,"imag_A_forward_V_hadmard_vector.txt",read_mode);
+		command_loop : while not endfile(read_imag_V_hadmard_A_forward_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_imag_V_hadmard_A_forward_file,inputLine);
 			read(inputLine,data_bit_sample);
 			data_slv_sample := to_stdlogicvector(data_bit_sample);
-			V_hadmard_A_forward_2d_input_data(I) <= data_slv_sample;
+			hadmard_A_forward_imag_V_input_data(I) <= data_slv_sample;
 			I := I + 1;
 		end loop;
 		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
@@ -570,12 +662,12 @@ begin
 		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
 	begin
 		report "Entered Read input process: " severity note;
-		file_open(read_H_hadmard_A_forward_file,"real_A_forward_V_hadmard_vector.txt",read_mode); -- renamed from matlab
-		command_loop : while not endfile(read_H_hadmard_A_forward_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
-			readline(read_H_hadmard_A_forward_file,inputLine);
+		file_open(read_real_V_hadmard_A_forward_file,"real_A_forward_V_hadmard_vector.txt",read_mode); -- renamed from matlab
+		command_loop : while not endfile(read_real_V_hadmard_A_forward_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_real_V_hadmard_A_forward_file,inputLine);
 			read(inputLine,data_bit_sample);
 			data_slv_sample := to_stdlogicvector(data_bit_sample);
-			H_hadmard_A_forward_2d_input_data(I) <= data_slv_sample;
+			hadmard_A_forward_real_V_input_data(I) <= data_slv_sample;
 			I := I + 1;
 		end loop;
 		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
@@ -789,7 +881,39 @@ begin
     -- completed 1-d fft
     report " completed 2-d fft";
    
-   
+    -- reinit
+    --line_wr_2_mem <= 0;
+    index_start <= 0;
+    uniform(seed1, seed2, rand);
+    wait for CLOCK_PERIOD * integer(round(rand * 50.0));  -- wait 50 clock cycles
+    
+    index_start <= 0;
+    
+       for i in 0 to MAX_SAMPLES-1 loop -- Col  processing A matrix 
+        --wr_2_mem <= '0';
+        --lst_wr_2_mem <= '0';
+        -- Drive inputs T_HOLD time after rising edge of clock
+        wait until rising_edge(aclk) and aresetn = '1';
+        wait for T_HOLD;
+
+        -- Drive a frame of input data : This is H A Calculation
+        ip_frame <= 3;
+         
+       -- Need to read first N lines from input file array from file 
+        transfer_line <= read_input_stim_re_and_imag_H_A_fr_file(index_start => index_start, 
+                         hadmard_A_forward_real_H_input_data => hadmard_A_forward_real_H_input_data,
+                         hadmard_A_forward_imag_H_input_data => hadmard_A_forward_imag_H_input_data);
+
+        
+        --drive_frame(IP_DATA);
+        wait until rising_edge(aclk);
+        wait for T_HOLD;
+        --drive_frame(transfer_line);
+         index_start <= index_start + MAX_SAMPLES;
+
+      end loop;
+   ---- END of one A Frame
+      report " Read Hadmard data for processing";
     wait;
     -- Keep stuff below for info
     -- Now perform an inverse transform on the result to get back to the original input
