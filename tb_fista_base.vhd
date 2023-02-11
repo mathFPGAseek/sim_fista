@@ -43,7 +43,7 @@
 -- regulations governing limitations on product liability.
 --
 -- THIS COPYRIGHT NOTICE AND DISCLAIMER MUST BE RETAINED AS
--- PART OF THIS FILE AT ALL TIMES.
+-- PART OF THIS FILE AT ALL TIMES..\
 --------------------------------------------------------------------------------
 -- Description:
 -- This is an example testbench for the Fast Fourier Transform IP core.
@@ -192,10 +192,10 @@ architecture tb of tb_xfft_0 is
   -- DUT  Hadmard signals
   -----------------------------------------------------------------------
     
-  signal   s_axis_v_hadmard_tvalid   : std_logic;
-  signal   s_axis_v_hadmard_tdata    : std_logic_vector(79 downto 0);
-  signal   s_axis_h_hadmard_tvalid   : std_logic;
-  signal   s_axis_h_hadmard_tdata    : std_logic_vector(79 downto 0);
+  signal   s_axis_V_hadmard_data_tvalid   : std_logic;
+  signal   s_axis_V_hadmard_data_tdata    : std_logic_vector(79 downto 0);
+  signal   s_axis_H_hadmard_data_tvalid   : std_logic;
+  signal   s_axis_H_hadmard_data_tdata    : std_logic_vector(79 downto 0);
   signal   m_axis_dout_tvalid        : std_logic;
   signal   m_axis_dout_tdata         : std_logic_vector(79 downto 0);
 
@@ -203,6 +203,8 @@ architecture tb of tb_xfft_0 is
   -- signal  to help trasfer fr file to input vectors for fft
    signal fft_real_input_data : image_data_word;
    signal transfer_line  :  T_IP_TABLE;
+   signal transfer_V_line  :  T_IP_TABLE;
+   signal transfer_H_line  :  T_IP_TABLE;
    signal index_start : integer := 0;
    
    signal fft_real_A_forward_2d_input_data : image_data_word;
@@ -415,6 +417,25 @@ architecture tb of tb_xfft_0 is
   	  return result;                                              	     
   end function  read_input_stim_re_and_imag_H_A_fr_file;
   
+  function read_input_stim_re_and_imag_V_A_fr_file(signal index_start    : in integer; 
+  	                               signal hadmard_A_forward_real_V_input_data : in image_data_word;
+  	                               signal hadmard_A_forward_imag_V_input_data : in image_data_word) return T_IP_TABLE is
+    variable result : T_IP_TABLE;	
+    variable end_index : integer;
+    variable K : integer := 0;
+    variable i : integer;
+  	constant MAX_SAMPLES : integer := 256;
+  	begin
+  	  ---report " start reading input file";
+  	  end_index := index_start + MAX_SAMPLES - 1;
+  	  for i in index_start to end_index loop
+  	    result(K).re := hadmard_A_forward_real_V_input_data(i);
+  	    result(K).im := hadmard_A_forward_imag_V_input_data(i);
+  	    K := K + 1;	  	  
+  	  end loop;
+  	  return result;                                              	     
+  end function  read_input_stim_re_and_imag_V_A_fr_file;
+  
   
   
   
@@ -504,10 +525,10 @@ begin
   port map( 
     aclk                          => aclk,                     --in STD_LOGIC;
     aresetn                       => aresetn,                  --in STD_LOGIC; 
-    s_axis_a_tvalid               => s_axis_v_hadmard_tvalid,  --in STD_LOGIC;
-    s_axis_a_tdata                => s_axis_v_hadmard_tdata,   --in STD_LOGIC_VECTOR ( 79 downto 0 );
-    s_axis_b_tvalid               => s_axis_h_hadmard_tvalid,  --in STD_LOGIC;
-    s_axis_b_tdata                => s_axis_h_hadmard_tdata,   --in STD_LOGIC_VECTOR ( 79 downto 0 );
+    s_axis_a_tvalid               => s_axis_H_hadmard_data_tvalid,  --in STD_LOGIC;
+    s_axis_a_tdata                => s_axis_H_hadmard_data_tdata,   --in STD_LOGIC_VECTOR ( 79 downto 0 );
+    s_axis_b_tvalid               => s_axis_V_hadmard_data_tvalid,  --in STD_LOGIC;
+    s_axis_b_tdata                => s_axis_V_hadmard_data_tdata,   --in STD_LOGIC_VECTOR ( 79 downto 0 );
     m_axis_dout_tvalid            => m_axis_dout_tvalid,       --out STD_LOGIC;
     m_axis_dout_tdata             => m_axis_dout_tdata         --out STD_LOGIC_VECTOR ( 79 downto 0 )
   );
@@ -744,6 +765,61 @@ begin
         drive_sample(sample_data, sample_last, valid_mode);
       end loop;
     end procedure drive_frame;
+    
+    procedure drive_hadmard_sample ( sample_H_data       : std_logic_vector(79 downto 0);
+                                     sample_V_data       : std_logic_vector(79 downto 0);
+                                     sample_last       : std_logic) is
+    begin
+      s_axis_H_hadmard_data_tdata  <= sample_H_data;
+      s_axis_V_hadmard_data_tdata  <= sample_V_data;
+      --s_axis_data_tlast  <= last;
+
+      if sample_last = '1' then   
+        s_axis_H_hadmard_data_tvalid <= '0';
+        s_axis_V_hadmard_data_tvalid <= '0';
+      else
+        s_axis_H_hadmard_data_tvalid <= '1';
+        s_axis_V_hadmard_data_tvalid <= '1';
+      end if;
+      --loop
+      wait until rising_edge(aclk);
+        --exit when s_axis_data_tready = '1';
+      --end loop;
+      wait for T_HOLD;
+      --s_axis_data_tvalid <= '0';
+    end procedure drive_hadmard_sample;
+    
+    procedure drive_hadmard_frame ( data_H         : T_IP_TABLE;
+                                    data_V         : T_IP_TABLE) is
+      variable samples : integer;
+      variable index   : integer;
+      variable sample_H_data : std_logic_vector(79 downto 0);
+      variable sample_V_data : std_logic_vector(79 downto 0);
+      variable sample_last : std_logic;
+    begin
+      samples := data_H'length;
+      index  := 0;
+      while index < data_H'length loop
+        -- Look up sample data in data table, construct TDATA value
+        sample_H_data(33 downto 0)  := data_H(index).re;                  -- real data
+        sample_H_data(39 downto 34) := (others => data_H(index).re(33));  -- sign-extend
+        sample_H_data(73 downto 40) := data_H(index).im;                  -- imaginary data
+        sample_H_data(79 downto 74) := (others => data_H(index).im(33));  -- sign-extend
+        sample_V_data(33 downto 0)  := data_V(index).re;                  -- real data
+        sample_V_data(39 downto 34) := (others => data_V(index).re(33));  -- sign-extend
+        sample_V_data(73 downto 40) := data_V(index).im;                  -- imaginary data
+        sample_V_data(79 downto 74) := (others => data_V(index).im(33));  -- sign-extend
+        -- Construct TLAST's value
+        index := index + 1;
+        if index >= data_H'length then
+          sample_last := '1';
+        else
+          sample_last := '0';
+        end if;
+        -- Drive the sample
+        drive_hadmard_sample(sample_H_data,sample_V_data, sample_last);
+      end loop;
+    end procedure drive_hadmard_frame;
 
     variable op_data_saved : T_IP_TABLE;  -- to save a copy of recorded output data
 
@@ -900,14 +976,19 @@ begin
         ip_frame <= 3;
          
        -- Need to read first N lines from input file array from file 
-        transfer_line <= read_input_stim_re_and_imag_H_A_fr_file(index_start => index_start, 
+        transfer_H_line <= read_input_stim_re_and_imag_H_A_fr_file(index_start => index_start, 
                          hadmard_A_forward_real_H_input_data => hadmard_A_forward_real_H_input_data,
                          hadmard_A_forward_imag_H_input_data => hadmard_A_forward_imag_H_input_data);
+                        
+        transfer_V_line <= read_input_stim_re_and_imag_V_A_fr_file(index_start => index_start, 
+                         hadmard_A_forward_real_V_input_data => hadmard_A_forward_real_V_input_data,
+                         hadmard_A_forward_imag_V_input_data => hadmard_A_forward_imag_V_input_data);
 
         
         --drive_frame(IP_DATA);
         wait until rising_edge(aclk);
         wait for T_HOLD;
+        drive_hadmard_frame (transfer_H_line, transfer_V_line); 
         --drive_frame(transfer_line);
          index_start <= index_start + MAX_SAMPLES;
 
