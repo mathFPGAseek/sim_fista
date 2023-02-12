@@ -63,7 +63,7 @@
 -- instance named "xfft_0".
 --
 -- Use Vivado's Run Simulation flow to run this testbench.  See the Vivado
--- documentation for details.
+-- documentation for details..
 --------------------------------------------------------------------------------
 -- engr: rbd
 -- date: 11/8/22
@@ -71,7 +71,7 @@
 -- simulating the FPGA FISTA ACCEL. Note, that the testben ch code will later be
 -- intgegrated into a controller, but for now we will start simple and just add up 
 -- some more testbench constructs or modules( synthesizable) that will later becoime
--- our design 
+-- our design. 
 
 library ieee;
 --library work;
@@ -134,6 +134,7 @@ architecture tb of tb_xfft_0 is
   signal write_fft_1d_raw_done : result_type;
   
   signal write_fft_2d_raw_done : result_type;
+  signal write_hadmard_2d_raw_done : result_type;
 
   -----------------------------------------------------------------------
   -- DUT  FFT signals
@@ -228,6 +229,9 @@ architecture tb of tb_xfft_0 is
    signal lst_wr_2_mem_rrr : std_logic;
    signal data_in_wr_2_mem: std_logic_vector(67 downto 0); -- don't care?
    signal line_wr_2_mem : integer := 0;
+   
+   signal m_axis_dout_tvalid_r    : std_logic;
+   signal m_axis_dout_tvalid_rr   : std_logic;
    	
    
    -- Specific memories
@@ -238,6 +242,11 @@ architecture tb of tb_xfft_0 is
    signal fft_raw_mem : MEM_ARRAY;
    signal op_sample_wr_2_raw_mem : integer := 0;
    signal address_raw_int   : integer := 0;
+   
+   signal hadmard_raw_mem : MEM_ARRAY;
+   signal op_sample_wr_2_hadmard_raw_mem : integer := 0;
+   signal address_hadmard_raw_int   : integer := 0;
+   signal address_hadmard_raw_int_r : integer := 0;
    
    --constant and types
    constant LINE_119 : integer := 119;
@@ -359,6 +368,37 @@ architecture tb of tb_xfft_0 is
 	      report" Done writing to file ";	  
   	    return result;  	       
      end function  writeToFileMemRawAForward2DContents;
+     
+     impure function writeToFileMemRawAHadmard2DContents(  signal fft_mem   : in MEM_ARRAY;
+		                                       signal fft_bin_center_addr : in bit_addr) return result_type is
+	   variable result       : result_type;    
+	   variable mem_line_var : line;
+	   variable done         : integer;
+	   variable k            : integer;
+	   variable fft_spec     : MEM_ARRAY;
+	   variable data_write_var : bit_vector(67 downto 0);
+	   begin
+	   	 	for i in  0 to MAX_SAMPLES-1 loop
+	         for j in 0 to MAX_SAMPLES-1 loop
+	            k := fft_bin_center_addr(j);
+	            fft_spec(i,k) := (fft_mem(i,j));
+	         end loop;
+	      end loop;
+	     file_open(write_file,"hadmard_A_forward_2d_mem_raw_vectors.txt",write_mode);
+	     report" File Opened for writing ";
+	          for j in  0 to MAX_SAMPLES-1 loop
+	              for i in 0 to MAX_SAMPLES-1 loop
+	                  data_write_var := to_bitvector(fft_spec(i,j));
+	                  write(mem_line_var ,data_write_var);
+	                  writeline(write_file,mem_line_var);                  
+	                  --report" Start writing to file ";
+	              end loop;
+	          end loop;
+	      done := 1;
+	      file_close(write_file);
+	      report" Done writing to file ";	  
+  	    return result;  	       
+     end function writeToFileMemRawAHadmard2DContents;
      
   -- Function that will be a point source  
   function read_input_stim_fr_file(signal index_start    : in integer; 
@@ -484,10 +524,17 @@ architecture tb of tb_xfft_0 is
 
   -- Recording output data, for reuse as input data
   signal op_sample       : integer    := 0;    -- output sample number
-  signal op_sample_first : std_logic  := '1';  -- indicates first output sample of a frame
+  --signal op_sample_first : std_logic  := '1';  -- indicates first output sample of a frame
   signal ip_frame        : integer    := 0;    -- input / configuration frame number
   signal op_data         : T_IP_TABLE := IP_TABLE_CLEAR;  -- recorded output data
   signal op_frame        : integer    := 0;    -- output frame number (incremented at end of frame output)
+  
+  signal op_hadmard_data_re        : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  signal op_hadmard_data_im        : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  signal op_hadmard_data_r_re      : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  signal op_hadmard_data_r_im      : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  signal op_hadmard_data_rr_re     : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  signal op_hadmard_data_rr_im     : std_logic_vector(33 downto 0) := (others => '0');  -- real data
 
 
 begin
@@ -958,7 +1005,7 @@ begin
     report " completed 2-d fft";
    
     -- reinit
-    --line_wr_2_mem <= 0;
+    line_wr_2_mem <= 0;
     index_start <= 0;
     uniform(seed1, seed2, rand);
     wait for CLOCK_PERIOD * integer(round(rand * 50.0));  -- wait 50 clock cycles
@@ -985,16 +1032,42 @@ begin
                          hadmard_A_forward_imag_V_input_data => hadmard_A_forward_imag_V_input_data);
 
         
-        --drive_frame(IP_DATA);
+        ---drive_frame(IP_DATA);
         wait until rising_edge(aclk);
         wait for T_HOLD;
-        drive_hadmard_frame (transfer_H_line, transfer_V_line); 
+        drive_hadmard_frame (transfer_H_line, transfer_V_line);
+        
+        wait until rising_edge(aclk);
+      
+        -- Write to buffer all data
+        --for k in 0 to MAX_SAMPLES-1 loop
+        --  wait until rising_edge(aclk);
+        --end loop;
+         
+        wait until rising_edge(aclk);
+       	lst_wr_2_mem <= '1';
+       	wait until rising_edge(aclk);
+        lst_wr_2_mem <= '0';
+        wait until rising_edge(aclk);
+        wait until rising_edge(aclk);
+  
+        -- incr line to write
+        line_wr_2_mem <= line_wr_2_mem + 1;
+        -- incr index_start
+        index_start <= index_start + MAX_SAMPLES;
         --drive_frame(transfer_line);
-         index_start <= index_start + MAX_SAMPLES;
+        -- index_start <= index_start + MAX_SAMPLES;
 
       end loop;
-   ---- END of one A Frame
-      report " Read Hadmard data for processing";
+    -- report write to file
+    report " start writing A hadmard 2d file";
+    
+    --write to file the reordered sequence
+    write_hadmard_2d_raw_done <= writeToFileMemRawAHadmard2DContents(hadmard_raw_mem,fft_bin_seq_addr);
+  
+    -- completed 2-d hadmard
+    report " completed 2-d hadmard";
+
     wait;
     -- Keep stuff below for info
     -- Now perform an inverse transform on the result to get back to the original input
@@ -1199,58 +1272,26 @@ begin
   		end if; -- wr mem
     end if; --aclk
    end process RamProcRawAdr;
-    -----------------------------------------------------------------------
-  -- Store FFT outputs to memory; We are reading an array built by  process record_outputs
-  -----------------------------------------------------------------------
-  RamProcData : process(aclk)
-  	
-  begin
-  	if rising_edge(aclk) then
-  		if aresetn = '0' then
-  			data_in_wr_2_mem <= (Others => '0');
-  		elsif wr_2_mem_rrr = '1' then 		
-  			--data_in_wr_2_mem <= op_data(address_int).im & op_data(address_int).re;   
-  			--fft_mem(line_wr_2_mem,address_int) <= data_in_wr_2_mem;
-  			fft_mem(line_wr_2_mem,address_int) <= op_data(address_int).im & op_data(address_int).re;
-  			          		          --DEBUG
-            if (line_wr_2_mem  = LINE_119)  then
-  			  report " *******************";
-         	  report " DEBUG/FFT_MEM";
-         	  report " Line ="             & integer'image(line_wr_2_mem );
-              report " Address int ="      & integer'image(address_int );
-         	  report " fft real sample = " & integer'image(to_integer(unsigned(op_data(address_int).re)));
-         	  report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(address_int).im)));
-         	  report " *******************"; 
-         	   
-            end if; 
 
-  		end if; -- wr mem
-    end if; --aclk
-   end process RamProcData;
-  -----------------------------------------------------------------------
-  -- Calculate Adr to Store FFT outputs to memory; 
-  -----------------------------------------------------------------------
-  RamProcAdr : process(aclk)
-  begin
-  	if rising_edge(aclk) then
-  		if aresetn = '0' then
-  			op_sample_wr_2_mem    <= 0;
-  			address_int           <= 0;
-  			
-  		elsif wr_2_mem_rr = '1' then 		
-  			address_int <= rev_addr(op_sample_wr_2_mem);				
-  			op_sample_wr_2_mem <= op_sample_wr_2_mem + 1;
-  			
-  		elsif lst_wr_2_mem_rr = '1' then 	
-  			op_sample_wr_2_mem <= 0;
- 
-  		end if; -- wr mem
-    end if; --aclk
-   end process RamProcAdr;
-   
   -----------------------------------------------------------------------
   -- Ancillary delays 
-  -----------------------------------------------------------------------			
+  -----------------------------------------------------------------------
+  del_wr_data : process(aclk)
+    begin
+      if aresetn = '0' then
+        op_hadmard_data_r_re	<= (others => '0');
+        op_hadmard_data_rr_re  	<= (others => '0');
+        op_hadmard_data_r_im	<= (others => '0');
+        op_hadmard_data_rr_im  	<= (others => '0');
+        
+      elsif(aclk'event and aclk = '1') then
+        op_hadmard_data_r_re	<= op_hadmard_data_re;
+        op_hadmard_data_rr_re	<= op_hadmard_data_r_re;
+        op_hadmard_data_r_im	<= op_hadmard_data_im;
+        op_hadmard_data_rr_im	<= op_hadmard_data_r_im;
+      end if;
+   end process del_wr_data;	
+      
   del_wr_registers : process(aclk)
   	begin
   		if aresetn = '0' then
@@ -1260,6 +1301,11 @@ begin
   			lst_wr_2_mem_r    <= '0';
   			lst_wr_2_mem_rr   <= '0';
   			lst_wr_2_mem_rrr  <= '0';
+	
+  			-- to support hadmard proc
+  			address_hadmard_raw_int_r <= 0;
+  			m_axis_dout_tvalid_r   <= '0';
+  			m_axis_dout_tvalid_rr  <= '0';
   	 
   	elsif( aclk'event and aclk = '1') then
   		  wr_2_mem_r       <= wr_2_mem;
@@ -1268,76 +1314,102 @@ begin
   		  lst_wr_2_mem_r   <= lst_wr_2_mem;
   		  lst_wr_2_mem_rr  <= lst_wr_2_mem_r;
   		  lst_wr_2_mem_rrr  <= lst_wr_2_mem_rr;
+  		  
+  		  -- to support hadmard proc
+  		  address_hadmard_raw_int_r <= address_hadmard_raw_int;
+  		  m_axis_dout_tvalid_r   <= m_axis_dout_tvalid;
+  		  m_axis_dout_tvalid_rr  <= m_axis_dout_tvalid_r ;
   	
     end if;
-  end process del_wr_registers;			
+  end process del_wr_registers;	
+  
+ 
+  -----------------------------------------------------------------------
+  -- Store hadmard outputs to memory; We are reading an array built by  process record_outputs
+  -----------------------------------------------------------------------
+  RamProcRawHadmardData : process(aclk)
+  	
+  begin
+  	if rising_edge(aclk) then
+  		if aresetn = '0' then
+  			data_in_wr_2_mem <= (Others => '0'); -- don't care
+  		elsif m_axis_dout_tvalid_rr = '1' then 		
+  			hadmard_raw_mem(line_wr_2_mem,address_hadmard_raw_int_r) <= op_hadmard_data_rr_im & op_hadmard_data_rr_re; 
+  				  
+  		end if; -- wr mem
+    end if; --aclk
+   end process RamProcRawHadmardData;
+  -----------------------------------------------------------------------
+  -- Calculate Adr to Store hadmard outputs to memory; 
+  -----------------------------------------------------------------------
+  RamProcRawHadmardAdr : process(aclk)
+  begin
+  	if rising_edge(aclk) then
+  		if aresetn = '0' then
+  			op_sample_wr_2_hadmard_raw_mem    <= 0;
+  			address_hadmard_raw_int           <= 0;
+  			
+  		elsif m_axis_dout_tvalid_r = '1' then 		
+  			address_hadmard_raw_int <= op_sample_wr_2_hadmard_raw_mem;				
+  			op_sample_wr_2_hadmard_raw_mem <= op_sample_wr_2_hadmard_raw_mem + 1;
+  			
+  		elsif lst_wr_2_mem_rr = '1' then 	
+  			op_sample_wr_2_hadmard_raw_mem <= 0;
+ 
+  		end if; -- wr mem
+    end if; --aclk
+   end process RamProcRawHadmardAdr;		
 
   -----------------------------------------------------------------------
   -- Record outputs, to use later as inputs for another frame
   -----------------------------------------------------------------------
 
   record_outputs : process (aclk)
-    -- Function to digit-reverse an integer, to convert output to input ordering
-    function digit_reverse_int ( fwd, width : integer ) return integer is
-      variable rev     : integer;
-      variable fwd_slv : std_logic_vector(width-1 downto 0);
-      variable rev_slv : std_logic_vector(width-1 downto 0);
-    begin
-      fwd_slv := std_logic_vector(to_unsigned(fwd, width));
-      for i in 0 to width/2-1 loop  -- reverse in digit groups (2 bits at a time)
-        rev_slv(i*2+1 downto i*2) := fwd_slv(width-i*2-1 downto width-i*2-2);
-      end loop;
-      if width mod 2 = 1 then  -- width is odd: LSB moves to MSB
-        rev_slv(width-1) := fwd_slv(0);
-      end if;
-      rev := to_integer(unsigned(rev_slv));
-      return rev;
-    end function digit_reverse_int;
-
-    variable index : integer := 0;
-
+  variable index : integer := 0;
   begin
     if rising_edge(aclk) then
       if aresetn = '0' then  -- aresetn is active low
-        op_sample_first <= '1';
         op_sample       <= 0;
         op_data         <= IP_TABLE_CLEAR;
       elsif m_axis_data_tvalid = '1' and m_axis_data_tready = '1' then
-        -- Record output data such that it can be used as input data
-        --index := op_sample;
-        -- Digit-reverse output sample number, to get actual sample index as outputs are in digit-reversed order
-        --index := digit_reverse_int(index, 8);
-        --op_data(index).re <= m_axis_data_tdata(33 downto 0);
-        --op_data(index).im <= m_axis_data_tdata(73 downto 40);
           op_data(op_sample).re <= m_axis_data_tdata(33 downto 0);
           op_data(op_sample).im <= m_axis_data_tdata(73 downto 40);
-          		          --DEBUG
-         if (line_wr_2_mem  = LINE_119)  then
 
-         	  --report " *******************";
-         	  --report " *******************";
-         	  --report " DEBUG/REcord Output";
-         	  --report " Line ="             & integer'image(line_wr_2_mem );
-              --report " Opsample ="         & integer'image(op_sample);
-              --report " Address int ="      & integer'image(address_int );
-              --report " Opsample wr 2 mem ="  & integer'image(op_sample_wr_2_mem );
-         	  --report " fft real sample = " & integer'image(to_integer(unsigned(op_data(op_sample).re)));
-         	  --report " fft imsg sample = " & integer'image(to_integer(unsigned(op_data(op_sample).im)));
-         	  --report " *******************";
-         	  --report " *******************";
-         end if;
-        -- Increment output sample counter
-        if m_axis_data_tlast = '1' then  -- end of output frame: reset sample counter and increment frame counter
-          op_sample <= 0;
-          op_frame <= op_frame + 1;
-          op_sample_first <= '1';  -- for next output frame
-        else
-          op_sample_first <= '0';
-          op_sample <= op_sample + 1;
-        end if;
-      end if;
-    end if;
+          -- Increment output sample counter
+          if m_axis_data_tlast = '1' then  -- end of output frame: reset sample counter and increment frame counter
+            op_sample <= 0;
+            op_frame <= op_frame + 1;
+          else
+            op_sample <= op_sample + 1;
+          end if; -- last
+      end if; -- valid
+    end if; -- aclk
   end process record_outputs;
+  
+  -----------------------------------------------------------------------
+  -- Record hadmard outputs, to use later as inputs for another frame
+  -----------------------------------------------------------------------
+
+  record_hadmard_outputs : process (aclk)
+  variable index : integer := 0;
+  begin
+    if rising_edge(aclk) then
+      if aresetn = '0' then  -- aresetn is active low
+        op_hadmard_data_re      <= (others=> '0');
+        op_hadmard_data_im      <= (others=> '0');
+      elsif m_axis_dout_tvalid = '1' then
+        op_hadmard_data_re <= m_axis_dout_tdata(33 downto 0);
+        op_hadmard_data_im <= m_axis_dout_tdata(73 downto 40);
+      elsif lst_wr_2_mem = '1' then
+        op_hadmard_data_re  <= (others=>'0');
+        op_hadmard_data_im <= (others=>'0');
+      else -- is it okay to create a latch here ?
+        op_hadmard_data_re  <= op_hadmard_data_re;
+        op_hadmard_data_im <=  op_hadmard_data_im;
+        
+      end if;
+    end if; -- aclk
+  end process record_hadmard_outputs;
 
   -----------------------------------------------------------------------
   -- Check outputs
