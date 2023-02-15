@@ -113,7 +113,9 @@ architecture tb of tb_xfft_0 is
   -- Zeroed input data table, for reset and initialization
   constant IP_TABLE_CLEAR : T_IP_TABLE := (others => (re => (others => '0'),
                                                       im => (others => '0')));
-                                                     	
+                                                      
+                                                      
+  constant HADMARD_OUTPUT_LAT_DELAY : integer:=  13;                                                  	
   -----------------------------------------------------------------------
   -- Read/write File Type and constants
   -----------------------------------------------------------------------                                                    	
@@ -194,8 +196,12 @@ architecture tb of tb_xfft_0 is
   -----------------------------------------------------------------------
     
   signal   s_axis_V_hadmard_data_tvalid   : std_logic;
+  signal   s_axis_V_hadmard_data_tvalid_r : std_logic;
+  signal   s_axis_V_hadmard_data_ext_tvalid : std_logic;
   signal   s_axis_V_hadmard_data_tdata    : std_logic_vector(79 downto 0);
   signal   s_axis_H_hadmard_data_tvalid   : std_logic;
+  signal   s_axis_H_hadmard_data_tvalid_r : std_logic;
+  signal   s_axis_H_hadmard_data_ext_tvalid : std_logic;
   signal   s_axis_H_hadmard_data_tdata    : std_logic_vector(79 downto 0);
   signal   m_axis_dout_tvalid        : std_logic;
   signal   m_axis_dout_tdata         : std_logic_vector(79 downto 0);
@@ -535,7 +541,12 @@ architecture tb of tb_xfft_0 is
   signal op_hadmard_data_r_im      : std_logic_vector(33 downto 0) := (others => '0');  -- real data
   signal op_hadmard_data_rr_re     : std_logic_vector(33 downto 0) := (others => '0');  -- real data
   signal op_hadmard_data_rr_im     : std_logic_vector(33 downto 0) := (others => '0');  -- real data
-
+  
+  -----------------------------------------------------------------------
+  -- debug signals
+  -----------------------------------------------------------------------
+  signal debug_hadmard_frame_last_sample : std_logic;
+  signal debug_hadmard_frame_count : integer :=0;
 
 begin
 
@@ -572,9 +583,9 @@ begin
   port map( 
     aclk                          => aclk,                     --in STD_LOGIC;
     aresetn                       => aresetn,                  --in STD_LOGIC; 
-    s_axis_a_tvalid               => s_axis_H_hadmard_data_tvalid,  --in STD_LOGIC;
+    s_axis_a_tvalid               => s_axis_H_hadmard_data_ext_tvalid,  --in STD_LOGIC; 
     s_axis_a_tdata                => s_axis_H_hadmard_data_tdata,   --in STD_LOGIC_VECTOR ( 79 downto 0 );
-    s_axis_b_tvalid               => s_axis_V_hadmard_data_tvalid,  --in STD_LOGIC;
+    s_axis_b_tvalid               => s_axis_V_hadmard_data_ext_tvalid,  --in STD_LOGIC;
     s_axis_b_tdata                => s_axis_V_hadmard_data_tdata,   --in STD_LOGIC_VECTOR ( 79 downto 0 );
     m_axis_dout_tvalid            => m_axis_dout_tvalid,       --out STD_LOGIC;
     m_axis_dout_tdata             => m_axis_dout_tdata         --out STD_LOGIC_VECTOR ( 79 downto 0 )
@@ -846,6 +857,7 @@ begin
     begin
       samples := data_H'length;
       index  := 0;
+      debug_hadmard_frame_count <= 0;
       while index < data_H'length loop
         -- Look up sample data in data table, construct TDATA value
         sample_H_data(33 downto 0)  := data_H(index).re;                  -- real data
@@ -858,10 +870,13 @@ begin
         sample_V_data(79 downto 74) := (others => data_V(index).im(33));  -- sign-extend
         -- Construct TLAST's value
         index := index + 1;
+        debug_hadmard_frame_count <= debug_hadmard_frame_count + 1;
         if index >= data_H'length then
           sample_last := '1';
+          debug_hadmard_frame_last_sample <= '1';
         else
           sample_last := '0';
+          debug_hadmard_frame_last_sample <= '0';
         end if;
         -- Drive the sample
         drive_hadmard_sample(sample_H_data,sample_V_data, sample_last);
@@ -872,6 +887,13 @@ begin
 
 
   begin
+  
+    wait for CLOCK_PERIOD * 5;
+    aresetn <= '0';  -- assert reset (active low)
+    wait for CLOCK_PERIOD * 2;  -- hold reset active for 2 cycles, as stated in the FFT Datasheet
+    aresetn <= '1';  -- deassert reset
+    wait for CLOCK_PERIOD * 5;
+    
     for i in 0 to MAX_SAMPLES-1 loop -- Row proessing A matrix 
         wr_2_mem <= '0';
         lst_wr_2_mem <= '0';
@@ -1014,7 +1036,7 @@ begin
     
        for i in 0 to MAX_SAMPLES-1 loop -- Col  processing A matrix 
         --wr_2_mem <= '0';
-        --lst_wr_2_mem <= '0';
+        lst_wr_2_mem <= '0';
         -- Drive inputs T_HOLD time after rising edge of clock
         wait until rising_edge(aclk) and aresetn = '1';
         wait for T_HOLD;
@@ -1039,10 +1061,10 @@ begin
         
         wait until rising_edge(aclk);
       
-        -- Write to buffer all data
-        --for k in 0 to MAX_SAMPLES-1 loop
-        --  wait until rising_edge(aclk);
-        --end loop;
+        -- Latency of hadmard mult
+        for k in 0 to HADMARD_OUTPUT_LAT_DELAY loop
+          wait until rising_edge(aclk);
+        end loop;
          
         wait until rising_edge(aclk);
        	lst_wr_2_mem <= '1';
@@ -1358,8 +1380,26 @@ begin
  
   		end if; -- wr mem
     end if; --aclk
-   end process RamProcRawHadmardAdr;		
-
+   end process RamProcRawHadmardAdr;
+   
+  -----------------------------------------------------------------------
+  -- extend valid out for hadmard input data
+  -----------------------------------------------------------------------		
+  s_axis_H_hadmard_data_ext_tvalid <= s_axis_H_hadmard_data_tvalid_r or s_axis_H_hadmard_data_tvalid;
+  s_axis_V_hadmard_data_ext_tvalid <= s_axis_V_hadmard_data_tvalid_r or s_axis_V_hadmard_data_tvalid;
+  
+  ext_valid : process(aclk)
+  
+  begin
+    if aresetn = '0' then
+      s_axis_H_hadmard_data_tvalid_r <= '0';
+      s_axis_V_hadmard_data_tvalid_r <= '0';
+    elsif(aclk'event and aclk = '1') then
+      s_axis_H_hadmard_data_tvalid_r <= s_axis_H_hadmard_data_tvalid;
+      s_axis_V_hadmard_data_tvalid_r <= s_axis_H_hadmard_data_tvalid;
+    end if;
+  end process ext_valid;
+    
   -----------------------------------------------------------------------
   -- Record outputs, to use later as inputs for another frame
   -----------------------------------------------------------------------
