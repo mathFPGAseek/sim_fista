@@ -1156,6 +1156,15 @@ begin
     
     
     ---********************
+        -- 2nd configuration: same as 1st, except:
+    ip_frame <= 4;
+    cfg_fwd_inv <= INV;  -- inverse transform
+    --cfg_scale_sch <= ZERO;  -- no scaling
+    do_config := IMMEDIATE;
+    while do_config /= DONE loop
+      wait until rising_edge(aclk) and aresetn = '1';
+    end loop;
+    wait for T_HOLD;
     -- reinit
     line_wr_2_mem <= 0;
     index_start <= 0;
@@ -1180,7 +1189,7 @@ begin
         --drive_frame(IP_DATA);
         wait until rising_edge(aclk);
         wait for T_HOLD;
-        --drive_frame(transfer_line); --??? Need to cofngiure for ifft and check drive frame
+        drive_frame(transfer_line);
 
         -- Allow the result to emerge
         wait until m_axis_data_tlast = '1';
