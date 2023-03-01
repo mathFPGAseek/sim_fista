@@ -139,6 +139,7 @@ architecture tb of tb_xfft_0 is
   
   signal write_fft_2d_raw_done : result_type;
   signal write_hadmard_2d_raw_done : result_type;
+  signal write_ifft_1d_raw_done : result_type;
 
   -----------------------------------------------------------------------
   -- DUT  FFT signals
@@ -411,6 +412,38 @@ architecture tb of tb_xfft_0 is
   	    return result;  	       
      end function writeToFileMemRawAHadmard2DContents;
      
+  	impure function writeToFileMemRawInverse1DContents(  signal fft_mem   : in MEM_ARRAY;
+		                                       signal fft_bin_center_addr : in bit_addr) return result_type is
+	   variable result       : result_type;    
+	   variable mem_line_var : line;
+	   variable done         : integer;
+	   variable k            : integer;
+	   variable fft_spec     : MEM_ARRAY;
+	   variable data_write_var : bit_vector(67 downto 0);
+	   begin
+	   	 	for i in  0 to MAX_SAMPLES-1 loop
+	         for j in 0 to MAX_SAMPLES-1 loop
+	            k := fft_bin_center_addr(j);
+	            fft_spec(i,k) := (fft_mem(i,j));
+	         end loop;
+	      end loop;
+	     file_open(write_file,"ifft_1d_mem_raw_vectors.txt",write_mode);
+	     report" File Opened for writing ";
+	          for i in  0 to MAX_SAMPLES-1 loop
+	              for j in 0 to MAX_SAMPLES-1 loop
+	                  data_write_var := to_bitvector(fft_spec(i,j));
+	                  write(mem_line_var ,data_write_var);
+	                  writeline(write_file,mem_line_var);                  
+	                  --report" Start writing to file ";
+	              end loop;
+	          end loop;
+	      done := 1;
+	      file_close(write_file);
+	      report" Done writing to file ";	  
+  	    return result;  	       
+     end function  writeToFileMemRawInverse1DContents; 
+     
+       
   -- Function that will be a point source  
   function read_input_stim_fr_file(signal index_start    : in integer; 
   	                               signal fft_real_input_data : in image_data_word) return T_IP_TABLE is
@@ -1226,7 +1259,8 @@ begin
     
     --write to file the reordered sequence
     --write_ifft_1d_raw_done <= writeToFileMemRawAIfft1DContents(ifft_raw_mem,fft_bin_seq_addr);
-    
+    write_ifft_1d_raw_done <= writeToFileMemRawInverse1DContents(fft_raw_mem,fft_bin_seq_addr);
+  
     -- completed 1-d fft
     report " completed 1-d ifft";
       
