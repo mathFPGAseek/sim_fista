@@ -130,6 +130,8 @@ architecture tb of tb_xfft_0 is
   file read_real_H_hadmard_A_forward_file : text;
   file read_imag_A_1d_ifft_file : text;
   file read_real_A_1d_ifft_file : text;
+  file read_imag_A_2d_ifft_file : text;
+  file read_real_A_2d_ifft_file : text;
   file write_file : text;
   type result_type is ( '0', '1');
   signal write_line_done : result_type;
@@ -140,6 +142,8 @@ architecture tb of tb_xfft_0 is
   signal write_fft_2d_raw_done : result_type;
   signal write_hadmard_2d_raw_done : result_type;
   signal write_ifft_1d_raw_done : result_type;
+  
+  signal  write_ifft_2d_raw_done : result_type;
 
   -----------------------------------------------------------------------
   -- DUT  FFT signals
@@ -228,6 +232,9 @@ architecture tb of tb_xfft_0 is
    
    signal ifft_imag_A_1d_input_data : image_data_word;
    signal ifft_real_A_1d_input_data : image_data_word;
+   
+   signal ifft_imag_A_2d_input_data : image_data_word;
+   signal ifft_real_A_2d_input_data : image_data_word;
    
    
    -- shared signals for memory
@@ -441,8 +448,38 @@ architecture tb of tb_xfft_0 is
 	      file_close(write_file);
 	      report" Done writing to file ";	  
   	    return result;  	       
-     end function  writeToFileMemRawInverse1DContents; 
-     
+     end function  writeToFileMemRawInverse1DContents;
+      
+   impure function writeToFileMemRawInverse2DContents(  signal fft_mem   : in MEM_ARRAY;
+		                                       signal fft_bin_center_addr : in bit_addr) return result_type is
+	   variable result       : result_type;    
+	   variable mem_line_var : line;
+	   variable done         : integer;
+	   variable k            : integer;
+	   variable fft_spec     : MEM_ARRAY;
+	   variable data_write_var : bit_vector(67 downto 0);
+	   begin
+	   	 	for i in  0 to MAX_SAMPLES-1 loop
+	         for j in 0 to MAX_SAMPLES-1 loop
+	            k := fft_bin_center_addr(j);
+	            fft_spec(i,k) := (fft_mem(i,j));
+	         end loop;
+	      end loop;
+	     file_open(write_file,"ifft_2d_mem_raw_vectors.txt",write_mode);
+	     report" File Opened for writing ";
+	          for i in  0 to MAX_SAMPLES-1 loop
+	              for j in 0 to MAX_SAMPLES-1 loop
+	                  data_write_var := to_bitvector(fft_spec(i,j));
+	                  write(mem_line_var ,data_write_var);
+	                  writeline(write_file,mem_line_var);                  
+	                  --report" Start writing to file ";
+	              end loop;
+	          end loop;
+	      done := 1;
+	      file_close(write_file);
+	      report" Done writing to file ";	  
+  	    return result;  	       
+     end function  writeToFileMemRawInverse2DContents;   
        
   -- Function that will be a point source  
   function read_input_stim_fr_file(signal index_start    : in integer; 
@@ -538,6 +575,25 @@ architecture tb of tb_xfft_0 is
   	  end loop;
   	  return result;                                              	     
   end function  read_input_stim_re_and_imag_ifft_A_fr_file; 
+  
+    function read_input_stim_re_and_imag_2d_ifft_A_fr_file(signal index_start    : in integer; 
+  	                               signal ifft_real_A_2d_input_data : in image_data_word;
+  	                               signal ifft_imag_A_2d_input_data : in image_data_word) return T_IP_TABLE is
+    variable result : T_IP_TABLE;	
+    variable end_index : integer;
+    variable K : integer := 0;
+    variable i : integer;
+  	constant MAX_SAMPLES : integer := 256;
+  	begin
+  	  ---report " start reading input file";
+  	  end_index := index_start + MAX_SAMPLES - 1;
+  	  for i in index_start to end_index loop
+  	    result(K).re := ifft_real_A_2d_input_data(i);
+  	    result(K).im := ifft_imag_A_2d_input_data(i);
+  	    K := K + 1;	  	  
+  	  end loop;
+  	  return result;                                              	     
+  end function  read_input_stim_re_and_imag_2d_ifft_A_fr_file; 
   
   
   
@@ -844,6 +900,47 @@ begin
 			read(inputLine,data_bit_sample);
 			data_slv_sample := to_stdlogicvector(data_bit_sample);
 			ifft_real_A_1d_input_data(I) <= data_slv_sample;
+			I := I + 1;
+		end loop;
+		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
+		wait;
+	end process ; -- readInputStim.
+	
+			
+  rdA2DImagIFFT : process
+		variable inputLine : line;
+		variable data_bit_sample : bit_vector(33 downto 0);
+		variable data_slv_sample : std_logic_vector(33 downto 0);
+		variable I : integer := 0;
+		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
+	begin
+		report "Entered Read input process: " severity note;
+		file_open(read_imag_A_2d_ifft_file,"imag_A_2d_ifft_vectors.txt",read_mode);
+		command_loop : while not endfile(read_imag_A_2d_ifft_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_imag_A_2d_ifft_file,inputLine);
+			read(inputLine,data_bit_sample);
+			data_slv_sample := to_stdlogicvector(data_bit_sample);
+			ifft_imag_A_2d_input_data(I) <= data_slv_sample;
+			I := I + 1;
+		end loop;
+		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
+		wait;
+	end process ; -- readInputStim.
+	
+	rdA2DRealIFFT : process
+		variable inputLine : line;
+		variable data_bit_sample : bit_vector(33 downto 0);
+		variable data_slv_sample : std_logic_vector(33 downto 0);
+		variable I : integer := 0;
+		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
+	begin
+		report "Entered Read input process: " severity note;
+		file_open(read_real_A_2d_ifft_file,"real_A_2d_ifft_vectors.txt",read_mode);
+		command_loop : while not endfile(read_real_A_2d_ifft_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_real_A_2d_ifft_file,inputLine);
+			read(inputLine,data_bit_sample);
+			data_slv_sample := to_stdlogicvector(data_bit_sample);
+			ifft_real_A_2d_input_data(I) <= data_slv_sample;
 			I := I + 1;
 		end loop;
 		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
@@ -1265,6 +1362,76 @@ begin
     report " completed 1-d ifft";
       
     ---********************
+    -- reinit
+    line_wr_2_mem <= 0;
+    index_start <= 0;
+    uniform(seed1, seed2, rand);
+    wait for CLOCK_PERIOD * integer(round(rand * 50.0));  -- wait 50 clock cycles
+    
+    index_start <= 0;
+    
+       for i in 0 to MAX_SAMPLES-1 loop -- Col  processing A matrix 
+        wr_2_mem <= '0';
+        lst_wr_2_mem <= '0';
+        -- Drive inputs T_HOLD time after rising edge of clock
+        wait until rising_edge(aclk) and aresetn = '1';
+        wait for T_HOLD;
+
+        -- Drive a frame of input data
+        ip_frame <= 2;
+       -- Need to read first N lines from input file array from file 
+        transfer_line <= read_input_stim_re_and_imag_2d_ifft_A_fr_file(index_start => index_start, ifft_real_A_2d_input_data => ifft_real_A_2d_input_data,
+                                                             ifft_imag_A_2d_input_data => ifft_imag_A_2d_input_data );
+
+
+        --drive_frame(IP_DATA);
+        wait until rising_edge(aclk);
+        wait for T_HOLD;
+        drive_frame(transfer_line);
+
+        -- Allow the result to emerge
+        wait until m_axis_data_tlast = '1';
+        wait until rising_edge(aclk);
+        wait for T_HOLD;
+
+        --if ( i = 119) then
+        --	report " index i =" & integer'image(i);
+        --	report " index_start =" & integer'image(index_start);
+        --end if;
+        	       
+        -- write stored op_data into memory
+        for k in 0 to MAX_SAMPLES-1 loop
+          wait until rising_edge(aclk);
+          wr_2_mem <= '1';
+          --debug
+          if ( k = 32) and (i = 119) then
+          	report " inside for loop for writing to memory";
+          end if;
+  
+        end loop;     
+        wait until rising_edge(aclk);
+        wr_2_mem <= '0';
+       	lst_wr_2_mem <= '1';
+       	wait until rising_edge(aclk);
+        wr_2_mem <= '0';
+        lst_wr_2_mem <= '0';
+        wait until rising_edge(aclk);
+        wait until rising_edge(aclk);
+  
+        -- incr line to write
+        line_wr_2_mem <= line_wr_2_mem + 1;
+        -- incr index_start
+        index_start <= index_start + MAX_SAMPLES;
+    end loop;
+    
+           -- report write to file
+    report " start writing ifft 2d file";
+    
+    --write to file the reordered sequence
+  write_ifft_2d_raw_done <= writeToFileMemRawInverse2DContents(fft_raw_mem,fft_bin_seq_addr);
+  
+    -- completed 1-d fft
+    report " completed 2-d ifft";
 
     wait;
     -- Keep stuff below for info
