@@ -43,7 +43,7 @@
 -- regulations governing limitations on product liability.
 --
 -- THIS COPYRIGHT NOTICE AND DISCLAIMER MUST BE RETAINED AS
--- PART OF THIS FILE AT ALL TIMES..\
+-- PART OF THIS FILE AT ALL TIMES.
 --------------------------------------------------------------------------------
 -- Description:
 -- This is an example testbench for the Fast Fourier Transform IP core.
@@ -63,7 +63,7 @@
 -- instance named "xfft_0".
 --
 -- Use Vivado's Run Simulation flow to run this testbench.  See the Vivado
--- documentation for details..
+-- documentation for details.
 --------------------------------------------------------------------------------
 -- engr: rbd
 -- date: 11/8/22
@@ -132,6 +132,10 @@ architecture tb of tb_xfft_0 is
   file read_real_A_1d_ifft_file : text;
   file read_imag_A_2d_ifft_file : text;
   file read_real_A_2d_ifft_file : text;
+  file read_real_AV_file        : text;
+  file read_imag_AV_file        : text;
+  file read_real_b_file         : text;
+  file read_imag_b_file         : text;
   file write_file : text;
   type result_type is ( '0', '1');
   signal write_line_done : result_type;
@@ -143,7 +147,8 @@ architecture tb of tb_xfft_0 is
   signal write_hadmard_2d_raw_done : result_type;
   signal write_ifft_1d_raw_done : result_type;
   
-  signal  write_ifft_2d_raw_done : result_type;
+  signal write_ifft_2d_raw_done : result_type;
+  signal write_av_minus_b_raw_done : result_type;  
 
   -----------------------------------------------------------------------
   -- DUT  FFT signals
@@ -213,12 +218,26 @@ architecture tb of tb_xfft_0 is
   signal   m_axis_dout_tvalid        : std_logic;
   signal   m_axis_dout_tdata         : std_logic_vector(79 downto 0);
 
+  -----------------------------------------------------------------------
+  -- DUT  AV-b signals
+  -----------------------------------------------------------------------
+   signal s_axis_AV_data_tdata     : std_logic_vector(79 downto 0);
+   signal s_axis_b_data_tdata      : std_logic_vector(79 downto 0);
+   signal s_axis_AV_data_tvalid    : std_logic;
+   signal s_axis_AV_data_tvalid_r  : std_logic;
+   signal s_axis_AV_data_tvalid_rr : std_logic;
+   signal s_axis_b_data_tvalid     : std_logic;
+   
+   signal av_minus_b_real          : std_logic_vector(33 downto 0);
+   signal av_minus_b_imag          : std_logic_vector(33 downto 0);
 
   -- signal  to help trasfer fr file to input vectors for fft
    signal fft_real_input_data : image_data_word;
-   signal transfer_line  :  T_IP_TABLE;
+   signal transfer_line    :  T_IP_TABLE;
    signal transfer_V_line  :  T_IP_TABLE;
    signal transfer_H_line  :  T_IP_TABLE;
+   signal transfer_AV_line :  T_IP_TABLE;
+   signal transfer_b_line  :  T_IP_TABLE;
    signal index_start : integer := 0;
    
    signal fft_real_A_forward_2d_input_data : image_data_word;
@@ -235,6 +254,12 @@ architecture tb of tb_xfft_0 is
    
    signal ifft_imag_A_2d_input_data : image_data_word;
    signal ifft_real_A_2d_input_data : image_data_word;
+   
+   signal AV_real_input_data        : image_data_word;
+   signal AV_imag_input_data        : image_data_word;
+   
+   signal b_real_input_data         : image_data_word;
+   signal b_imag_input_data         : image_data_word;
    
    
    -- shared signals for memory
@@ -266,6 +291,11 @@ architecture tb of tb_xfft_0 is
    signal op_sample_wr_2_hadmard_raw_mem : integer := 0;
    signal address_hadmard_raw_int   : integer := 0;
    signal address_hadmard_raw_int_r : integer := 0;
+   
+   signal av_minus_b_raw_mem : MEM_ARRAY;
+   signal op_sample_wr_2_av_minus_b_raw_mem : integer := 0;
+   signal address_av_minus_b_raw_int   : integer := 0;
+   signal address_av_minus_b_raw_int_r : integer := 0;
    
    --constant and types
    constant LINE_119 : integer := 119;
@@ -479,10 +509,41 @@ architecture tb of tb_xfft_0 is
 	      file_close(write_file);
 	      report" Done writing to file ";	  
   	    return result;  	       
-     end function  writeToFileMemRawInverse2DContents;   
+     end function  writeToFileMemRawInverse2DContents; 
+     
+   impure function writeToFileMemRawAVMinusBContents(  signal fft_mem   : in MEM_ARRAY;
+		                                       signal fft_bin_center_addr : in bit_addr) return result_type is	                                    
+	   variable result       : result_type;    
+	   variable mem_line_var : line;
+	   variable done         : integer;
+	   variable k            : integer;
+	   variable fft_spec     : MEM_ARRAY;
+	   variable data_write_var : bit_vector(67 downto 0);
+	   begin
+	   	 	for i in  0 to MAX_SAMPLES-1 loop
+	         for j in 0 to MAX_SAMPLES-1 loop
+	            k := fft_bin_center_addr(j);
+	            fft_spec(i,k) := (fft_mem(i,j));
+	         end loop;
+	      end loop;
+	     file_open(write_file,"AV_minus_b_raw_vectors.txt",write_mode);
+	     report" File Opened for writing ";
+	          for j in  0 to MAX_SAMPLES-1 loop
+	              for i in 0 to MAX_SAMPLES-1 loop
+	                  data_write_var := to_bitvector(fft_spec(i,j));
+	                  write(mem_line_var ,data_write_var);
+	                  writeline(write_file,mem_line_var);                  
+	                  --report" Start writing to file ";
+	              end loop;
+	          end loop;
+	      done := 1;
+	      file_close(write_file);
+	      report" Done writing to file ";	  
+  	    return result;  	       
+     end function  writeToFileMemRawAVMinusBContents;  
        
   -- Function that will be a point source  
-  function read_input_stim_fr_file(signal index_start    : in integer; 
+  function read_input_stim_from_buffer(signal index_start    : in integer; 
   	                               signal fft_real_input_data : in image_data_word) return T_IP_TABLE is
     variable result : T_IP_TABLE;	
     variable end_index : integer;
@@ -498,9 +559,9 @@ architecture tb of tb_xfft_0 is
   	    K := K + 1;	  	  
   	  end loop;
   	  return result;                                              	     
-  end function  read_input_stim_fr_file;
+  end function  read_input_stim_from_buffer;
   
-  function read_input_stim_re_and_imag_fr_file(signal index_start    : in integer; 
+  function read_input_stim_re_and_imag_from_buffer(signal index_start    : in integer; 
   	                               signal fft_real_input_data : in image_data_word;
   	                               signal fft_imag_input_data : in image_data_word) return T_IP_TABLE is
     variable result : T_IP_TABLE;	
@@ -517,9 +578,9 @@ architecture tb of tb_xfft_0 is
   	    K := K + 1;	  	  
   	  end loop;
   	  return result;                                              	     
-  end function  read_input_stim_re_and_imag_fr_file;
+  end function  read_input_stim_re_and_imag_from_buffer;
   
-  function read_input_stim_re_and_imag_H_A_fr_file(signal index_start    : in integer; 
+  function read_input_stim_re_and_imag_H_A_from_buffer(signal index_start    : in integer; 
   	                               signal hadmard_A_forward_real_H_input_data : in image_data_word;
   	                               signal hadmard_A_forward_imag_H_input_data : in image_data_word) return T_IP_TABLE is
     variable result : T_IP_TABLE;	
@@ -536,9 +597,9 @@ architecture tb of tb_xfft_0 is
   	    K := K + 1;	  	  
   	  end loop;
   	  return result;                                              	     
-  end function  read_input_stim_re_and_imag_H_A_fr_file;
+  end function  read_input_stim_re_and_imag_H_A_from_buffer;
   
-  function read_input_stim_re_and_imag_V_A_fr_file(signal index_start    : in integer; 
+  function read_input_stim_re_and_imag_V_A_from_buffer(signal index_start    : in integer; 
   	                               signal hadmard_A_forward_real_V_input_data : in image_data_word;
   	                               signal hadmard_A_forward_imag_V_input_data : in image_data_word) return T_IP_TABLE is
     variable result : T_IP_TABLE;	
@@ -555,9 +616,9 @@ architecture tb of tb_xfft_0 is
   	    K := K + 1;	  	  
   	  end loop;
   	  return result;                                              	     
-  end function  read_input_stim_re_and_imag_V_A_fr_file;
+  end function  read_input_stim_re_and_imag_V_A_from_buffer;
  
-  function read_input_stim_re_and_imag_ifft_A_fr_file(signal index_start    : in integer; 
+  function read_input_stim_re_and_imag_ifft_A_from_buffer(signal index_start    : in integer; 
   	                               signal ifft_real_A_1d_input_data : in image_data_word;
   	                               signal ifft_imag_A_1d_input_data : in image_data_word) return T_IP_TABLE is
     variable result : T_IP_TABLE;	
@@ -574,9 +635,9 @@ architecture tb of tb_xfft_0 is
   	    K := K + 1;	  	  
   	  end loop;
   	  return result;                                              	     
-  end function  read_input_stim_re_and_imag_ifft_A_fr_file; 
+  end function  read_input_stim_re_and_imag_ifft_A_from_buffer; 
   
-    function read_input_stim_re_and_imag_2d_ifft_A_fr_file(signal index_start    : in integer; 
+    function read_input_stim_re_and_imag_2d_ifft_A_from_buffer(signal index_start    : in integer; 
   	                               signal ifft_real_A_2d_input_data : in image_data_word;
   	                               signal ifft_imag_A_2d_input_data : in image_data_word) return T_IP_TABLE is
     variable result : T_IP_TABLE;	
@@ -593,7 +654,48 @@ architecture tb of tb_xfft_0 is
   	    K := K + 1;	  	  
   	  end loop;
   	  return result;                                              	     
-  end function  read_input_stim_re_and_imag_2d_ifft_A_fr_file; 
+  end function  read_input_stim_re_and_imag_2d_ifft_A_from_buffer; 
+  
+  --++++++++++++++++++++++++++++++++++++++++++++++++-----
+    function read_input_stim_re_and_imag_AV_from_buffer(signal index_start    : in integer; 
+  	                               signal AV_real_input_data : in image_data_word;
+  	                               signal AV_imag_input_data : in image_data_word) return T_IP_TABLE is
+    variable result : T_IP_TABLE;	
+    variable end_index : integer;
+    variable K : integer := 0;
+    variable i : integer;
+  	constant MAX_SAMPLES : integer := 256;
+  	begin
+  	  ---report " start reading input file";
+  	  end_index := index_start + MAX_SAMPLES - 1;
+  	  for i in index_start to end_index loop
+  	    result(K).re := AV_real_input_data(i);
+  	    result(K).im := AV_imag_input_data(i);
+  	    K := K + 1;	  	  
+  	  end loop;
+  	  return result;                                              	     
+  end function  read_input_stim_re_and_imag_AV_from_buffer;
+  
+  function read_input_stim_re_and_imag_b_from_buffer(signal index_start    : in integer; 
+  	                               signal b_real_input_data : in image_data_word;
+  	                               signal b_imag_input_data  : in image_data_word) return T_IP_TABLE is
+    variable result : T_IP_TABLE;	
+    variable end_index : integer;
+    variable K : integer := 0;
+    variable i : integer;
+  	constant MAX_SAMPLES : integer := 256;
+  	begin
+  	  ---report " start reading input file";
+  	  end_index := index_start + MAX_SAMPLES - 1;
+  	  for i in index_start to end_index loop
+  	    result(K).re := b_real_input_data(i);
+  	    result(K).im := b_imag_input_data(i);
+  	    K := K + 1;	  	  
+  	  end loop;
+  	  return result;                                              	     
+  end function  read_input_stim_re_and_imag_b_from_buffer;
+  
+  --++++++++++++++++++++++++++++++++++++++++++++++++-----
   
   
   
@@ -653,12 +755,23 @@ architecture tb of tb_xfft_0 is
   signal op_hadmard_data_r_im      : std_logic_vector(33 downto 0) := (others => '0');  -- real data
   signal op_hadmard_data_rr_re     : std_logic_vector(33 downto 0) := (others => '0');  -- real data
   signal op_hadmard_data_rr_im     : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  	
+    
+  signal op_av_minus_b_data_re        : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  signal op_av_minus_b_data_im        : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  signal op_av_minus_b_data_r_re      : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  signal op_av_minus_b_data_r_im      : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  signal op_av_minus_b_data_rr_re     : std_logic_vector(33 downto 0) := (others => '0');  -- real data
+  signal op_av_minus_b_data_rr_im     : std_logic_vector(33 downto 0) := (others => '0');  -- real data
   
   -----------------------------------------------------------------------
   -- debug signals
   -----------------------------------------------------------------------
   signal debug_hadmard_frame_last_sample : std_logic;
   signal debug_hadmard_frame_count : integer :=0;
+  
+  signal debug_AV_frame_last_sample : std_logic;
+  signal debug_AV_frame_count : integer :=0;
 
 begin
 
@@ -702,6 +815,28 @@ begin
     m_axis_dout_tvalid            => m_axis_dout_tvalid,       --out STD_LOGIC;
     m_axis_dout_tdata             => m_axis_dout_tdata         --out STD_LOGIC_VECTOR ( 79 downto 0 )
   );
+  
+
+dut_av_minus_b_sub_0 : entity work.c_addsub_0
+port map( 
+    A    =>		s_axis_AV_data_tdata(33 downto 0),						-- in STD_LOGIC_VECTOR ( 33 downto 0 );
+    B    =>   s_axis_b_data_tdata(33 downto 0),             -- in STD_LOGIC_VECTOR ( 33 downto 0 );
+    CLK  =>   aclk,                                   -- in STD_LOGIC;
+    CE   =>   '1',                                    -- in STD_LOGIC;
+    SCLR =>   (not aresetn),                          -- in STD_LOGIC;
+    S    =>   av_minus_b_real                         -- out STD_LOGIC_VECTOR ( 33 downto 0 )
+    );
+    
+
+dut_av_minus_b_sub_1 : entity work.c_addsub_0
+port map( 
+    A    =>		s_axis_AV_data_tdata(73 downto 40),						-- in STD_LOGIC_VECTOR ( 33 downto 0 );
+    B    =>   s_axis_b_data_tdata(73 downto 40),            -- in STD_LOGIC_VECTOR ( 33 downto 0 );
+    CLK  =>   aclk,                                   -- in STD_LOGIC;
+    CE   =>   '1',                                    -- in STD_LOGIC;
+    SCLR =>   (not aresetn),                          -- in STD_LOGIC;
+    S    =>   av_minus_b_imag                         -- out STD_LOGIC_VECTOR ( 33 downto 0 )
+    );
 
 
   -----------------------------------------------------------------------
@@ -724,7 +859,7 @@ begin
     -------------------------------------------------
 	-- Read From file for psf 
 	-------------------------------------------------
-	readInputStim : process
+	readInputStimFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -744,7 +879,7 @@ begin
 		wait;
 	end process ; -- readInputStim
 	
-   readInputAMatrix2DRealStim : process
+   readInputAMatrix2DRealStimFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -764,7 +899,7 @@ begin
 		wait;
 	end process ; -- readInputStim
 	
-    readInputAMatrix2DImagStim : process
+    readInputAMatrix2DImagStimFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -784,7 +919,7 @@ begin
 		wait;
 	end process ; -- readInputStim
 	
-   readInputImagHHadmardStim : process
+   readInputImagHHadmardStimFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -804,7 +939,7 @@ begin
 		wait;
 	end process ; -- readInputStim.
 	
-    readInputRealHHadmardStim : process
+    readInputRealHHadmardStimFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -824,7 +959,7 @@ begin
 		wait;
 	end process ; -- readInputStim.
 	
-    readInputImagVHadmardStim : process
+    readInputImagVHadmardStimFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -845,7 +980,7 @@ begin
 	end process ; -- readInputStim.
 
      
-     readInputRealVHadmardStim : process
+     readInputRealVHadmardStimFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -866,7 +1001,7 @@ begin
 	end process ; -- readInputStim.
 	
 		
-    rdA1DImagIFFT : process
+    rdA1DImagIFFTFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -886,7 +1021,7 @@ begin
 		wait;
 	end process ; -- readInputStim.
 	
-	rdA1DRealIFFT : process
+	rdA1DRealIFFTFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -907,7 +1042,7 @@ begin
 	end process ; -- readInputStim.
 	
 			
-  rdA2DImagIFFT : process
+  rdA2DImagIFFTFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -927,7 +1062,7 @@ begin
 		wait;
 	end process ; -- readInputStim.
 	
-	rdA2DRealIFFT : process
+	rdA2DRealIFFTFromFile : process
 		variable inputLine : line;
 		variable data_bit_sample : bit_vector(33 downto 0);
 		variable data_slv_sample : std_logic_vector(33 downto 0);
@@ -946,6 +1081,100 @@ begin
 		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
 		wait;
 	end process ; -- readInputStim.
+	
+	---++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++------
+				
+  rdAVImagFromFile : process
+		variable inputLine : line;
+		variable data_bit_sample : bit_vector(33 downto 0);
+		variable data_slv_sample : std_logic_vector(33 downto 0);
+		variable I : integer := 0;
+		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
+	begin
+		report "Entered Read input process: " severity note;
+		file_open(read_imag_AV_file,"imag_Av_vectors.txt",read_mode);
+		command_loop : while not endfile(read_imag_AV_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_imag_AV_file,inputLine);
+			read(inputLine,data_bit_sample);
+			data_slv_sample := to_stdlogicvector(data_bit_sample);
+			AV_imag_input_data(I) <= data_slv_sample;
+			I := I + 1;
+		end loop;
+		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
+		wait;
+	end process ; -- readInputStim.
+	
+	rdAVRealFromFile: process
+		variable inputLine : line;
+		variable data_bit_sample : bit_vector(33 downto 0);
+		variable data_slv_sample : std_logic_vector(33 downto 0);
+		variable I : integer := 0;
+		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
+	begin
+		report "Entered Read input process: " severity note;
+		file_open(read_real_AV_file,"real_Av_vectors.txt",read_mode);
+		command_loop : while not endfile(read_real_AV_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_real_AV_file,inputLine);
+			read(inputLine,data_bit_sample);
+			data_slv_sample := to_stdlogicvector(data_bit_sample);
+			AV_real_input_data(I) <= data_slv_sample;
+			I := I + 1;
+		end loop;
+		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
+		wait;
+	end process ; -- readInputStim.
+	
+
+	
+	--+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++------
+	---++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++------
+				
+  rdbImagFromFile : process
+		variable inputLine : line;
+		variable data_bit_sample : bit_vector(33 downto 0);
+		variable data_slv_sample : std_logic_vector(33 downto 0);
+		variable I : integer := 0;
+		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
+	begin
+		report "Entered Read input process: " severity note;
+		file_open(read_imag_b_file,"imag_b_vectors.txt",read_mode);
+		command_loop : while not endfile(read_imag_b_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_imag_b_file,inputLine);
+			read(inputLine,data_bit_sample);
+			data_slv_sample := to_stdlogicvector(data_bit_sample);
+			b_imag_input_data(I) <= data_slv_sample;
+			I := I + 1;
+		end loop;
+		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
+		wait;
+	end process ; -- readInputStim.
+	
+	rdbRealFromFile: process
+		variable inputLine : line;
+		variable data_bit_sample : bit_vector(33 downto 0);
+		variable data_slv_sample : std_logic_vector(33 downto 0);
+		variable I : integer := 0;
+		constant  MAX_NUM_SAMPLE_TO_READ : integer := 65537; 
+	begin
+		report "Entered Read input process: " severity note;
+		file_open(read_real_b_file,"real_b_vectors.txt",read_mode);
+		command_loop : while not endfile(read_real_b_file) and I < MAX_NUM_SAMPLE_TO_READ  loop
+			readline(read_real_b_file,inputLine);
+			read(inputLine,data_bit_sample);
+			data_slv_sample := to_stdlogicvector(data_bit_sample);
+			b_real_input_data(I) <= data_slv_sample;
+			I := I + 1;
+		end loop;
+		--write(OUTPUT, "This is the time: " & to_string(now) & LF) ;
+		wait;
+	end process ; -- readInputStim.
+	
+
+	
+	--+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++------
+
+
+
   -----------------------------------------------------------------------
   -- Generate data slave channel inputs
   -----------------------------------------------------------------------
@@ -1076,6 +1305,69 @@ begin
         drive_hadmard_sample(sample_H_data,sample_V_data, sample_last);
       end loop;
     end procedure drive_hadmard_frame;
+    
+  --++++++++++++++++++++++++++++++++++++++++----
+      procedure drive_AV_minus_b_sample ( sample_AV_data       : std_logic_vector(79 downto 0);
+                                          sample_b_data        : std_logic_vector(79 downto 0);
+                                          sample_last          : std_logic) is
+    begin
+      s_axis_AV_data_tdata  <= sample_AV_data;
+      s_axis_b_data_tdata  <= sample_b_data;
+      --s_axis_data_tlast  <= last;
+
+      if sample_last = '1' then   
+        s_axis_AV_data_tvalid <= '0';
+        s_axis_b_data_tvalid <= '0';
+      else
+        s_axis_AV_data_tvalid <= '1';
+        s_axis_b_data_tvalid <= '1';
+      end if;
+      --loop
+      wait until rising_edge(aclk);
+        --exit when s_axis_data_tready = '1';
+      --end loop;
+      wait for T_HOLD;
+      --s_axis_data_tvalid <= '0';
+    end procedure drive_AV_minus_b_sample;
+    
+    procedure drive_AV_minus_b_frame ( data_AV         : T_IP_TABLE;
+                                       data_b         : T_IP_TABLE) is
+      variable samples : integer;
+      variable index   : integer;
+      variable sample_AV_data : std_logic_vector(79 downto 0);
+      variable sample_b_data  : std_logic_vector(79 downto 0);
+      variable sample_last : std_logic;
+    begin
+      samples := data_AV'length;
+      index  := 0;
+      debug_AV_frame_count <= 0;
+      while index < data_AV'length loop
+        -- Look up sample data in data table, construct TDATA value
+        sample_AV_data(33 downto 0)  := data_AV(index).re;                  -- real data
+        sample_AV_data(39 downto 34) := (others => data_AV(index).re(33));  -- sign-extend
+        sample_AV_data(73 downto 40) := data_AV(index).im;                  -- imaginary data
+        sample_AV_data(79 downto 74) := (others => data_AV(index).im(33));  -- sign-extend
+        sample_b_data(33 downto 0)  := data_b(index).re;                  -- real data
+        sample_b_data(39 downto 34) := (others => data_b(index).re(33));  -- sign-extend
+        sample_b_data(73 downto 40) := data_b(index).im;                  -- imaginary data
+        sample_b_data(79 downto 74) := (others => data_b(index).im(33));  -- sign-extend
+        -- Construct TLAST's value
+        index := index + 1;
+        debug_AV_frame_count <= debug_AV_frame_count + 1;
+        if index >= data_AV'length then
+          sample_last := '1';
+          debug_AV_frame_last_sample <= '1';
+        else
+          sample_last := '0';
+          debug_AV_frame_last_sample <= '0';
+        end if;
+        -- Drive the sample
+        drive_AV_minus_b_sample(sample_AV_data,sample_b_data, sample_last);
+      end loop;
+    end procedure drive_AV_minus_b_frame;
+  
+  
+  --++++++++++++++++++++++++++++++++++++++++----
 
     variable op_data_saved : T_IP_TABLE;  -- to save a copy of recorded output data
 
@@ -1098,7 +1390,7 @@ begin
         -- Drive a frame of input data
         ip_frame <= 1;
        -- Need to read first N lines from input file array from file 
-        transfer_line <= read_input_stim_fr_file(index_start => index_start, fft_real_input_data => fft_real_input_data);
+        transfer_line <= read_input_stim_from_buffer(index_start => index_start, fft_real_input_data => fft_real_input_data);
 
         --drive_frame(IP_DATA);
         wait until rising_edge(aclk);
@@ -1167,7 +1459,7 @@ begin
         -- Drive a frame of input data
         ip_frame <= 2;
        -- Need to read first N lines from input file array from file 
-        transfer_line <= read_input_stim_re_and_imag_fr_file(index_start => index_start, fft_real_input_data => fft_real_A_forward_2d_input_data,
+        transfer_line <= read_input_stim_re_and_imag_from_buffer(index_start => index_start, fft_real_input_data => fft_real_A_forward_2d_input_data,
                                                              fft_imag_input_data => fft_imag_A_forward_2d_input_data );
 
         --drive_frame(IP_DATA);
@@ -1239,11 +1531,11 @@ begin
         ip_frame <= 3;
          
        -- Need to read first N lines from input file array from file 
-        transfer_H_line <= read_input_stim_re_and_imag_H_A_fr_file(index_start => index_start, 
+        transfer_H_line <= read_input_stim_re_and_imag_H_A_from_buffer(index_start => index_start, 
                          hadmard_A_forward_real_H_input_data => hadmard_A_forward_real_H_input_data,
                          hadmard_A_forward_imag_H_input_data => hadmard_A_forward_imag_H_input_data);
                         
-        transfer_V_line <= read_input_stim_re_and_imag_V_A_fr_file(index_start => index_start, 
+        transfer_V_line <= read_input_stim_re_and_imag_V_A_from_buffer(index_start => index_start, 
                          hadmard_A_forward_real_V_input_data => hadmard_A_forward_real_V_input_data,
                          hadmard_A_forward_imag_V_input_data => hadmard_A_forward_imag_V_input_data);
 
@@ -1313,7 +1605,7 @@ begin
         -- Drive a frame of input data
         ip_frame <= 4;
        -- Need to read first N lines from input file array from file 
-        transfer_line <= read_input_stim_re_and_imag_ifft_A_fr_file(index_start => index_start, ifft_real_A_1d_input_data => ifft_real_A_1d_input_data,
+        transfer_line <= read_input_stim_re_and_imag_ifft_A_from_buffer(index_start => index_start, ifft_real_A_1d_input_data => ifft_real_A_1d_input_data,
                                                              ifft_imag_A_1d_input_data => ifft_imag_A_1d_input_data );
 
         --drive_frame(IP_DATA);
@@ -1378,9 +1670,9 @@ begin
         wait for T_HOLD;
 
         -- Drive a frame of input data
-        ip_frame <= 2;
+        ip_frame <= 5;
        -- Need to read first N lines from input file array from file 
-        transfer_line <= read_input_stim_re_and_imag_2d_ifft_A_fr_file(index_start => index_start, ifft_real_A_2d_input_data => ifft_real_A_2d_input_data,
+        transfer_line <= read_input_stim_re_and_imag_2d_ifft_A_from_buffer(index_start => index_start, ifft_real_A_2d_input_data => ifft_real_A_2d_input_data,
                                                              ifft_imag_A_2d_input_data => ifft_imag_A_2d_input_data );
 
 
@@ -1432,6 +1724,73 @@ begin
   
     -- completed 1-d fft
     report " completed 2-d ifft";
+    
+    
+    ----=++++++++++++++++++++++++++++++++++++++++++++++++-------
+  -- reinit
+    line_wr_2_mem <= 0;
+    index_start <= 0;
+    uniform(seed1, seed2, rand);
+    wait for CLOCK_PERIOD * integer(round(rand * 50.0));  -- wait 50 clock cycles
+    
+    index_start <= 0;
+    
+       for i in 0 to MAX_SAMPLES-1 loop -- Col  processing A matrix 
+        --wr_2_mem <= '0';
+        lst_wr_2_mem <= '0';
+        -- Drive inputs T_HOLD time after rising edge of clock
+        wait until rising_edge(aclk) and aresetn = '1';
+        wait for T_HOLD;
+
+        -- Drive a frame of input data : This is AV-b Calculation
+        ip_frame <= 6;
+         
+       -- Need to read first N lines from input file array from file 
+        transfer_AV_line <= read_input_stim_re_and_imag_AV_from_buffer(index_start => index_start, 
+                         AV_real_input_data  => AV_real_input_data,
+                         AV_imag_input_data  => AV_imag_input_data);
+                        
+        transfer_b_line <= read_input_stim_re_and_imag_b_from_buffer(index_start => index_start, 
+                         b_real_input_data => b_real_input_data,
+                         b_imag_input_data => b_imag_input_data); 	
+  
+        ---drive_frame(IP_DATA);
+        wait until rising_edge(aclk);
+        wait for T_HOLD;
+        drive_AV_minus_b_frame(transfer_AV_line, transfer_b_line);
+        
+        wait until rising_edge(aclk);
+      
+       -- Latency of hadmard mult
+       --for k in 0 to HADMARD_OUTPUT_LAT_DELAY loop
+       --   wait until rising_edge(aclk);
+       -- end loop;
+         
+        wait until rising_edge(aclk);
+       	lst_wr_2_mem <= '1';
+       	wait until rising_edge(aclk);
+        lst_wr_2_mem <= '0';
+        wait until rising_edge(aclk);
+        wait until rising_edge(aclk);
+  
+        -- incr line to write
+        line_wr_2_mem <= line_wr_2_mem + 1;
+        -- incr index_start
+        index_start <= index_start + MAX_SAMPLES;
+        --drive_frame(transfer_line);
+        -- index_start <= index_start + MAX_SAMPLES;
+
+      end loop;
+    -- report write to file
+    report " start writing AV - b file";
+    
+    --write to file the reordered sequence
+    write_av_minus_b_raw_done <= writeToFileMemRawAVMinusBContents(av_minus_b_raw_mem,fft_bin_seq_addr);
+  
+    -- completed 2-d hadmard
+    report " completed AV minus b";  
+    
+    ----+++++++++++++++++++++++++++++++++++++++++++++++++------
 
     wait;
     -- Keep stuff below for info
@@ -1602,7 +1961,7 @@ begin
     do_config := DONE;
 
   end process config_stimuli;
-      -----------------------------------------------------------------------
+  -----------------------------------------------------------------------
   -- Store FFT outputs to memory; We are reading an array built by  process record_outputs
   -----------------------------------------------------------------------
   RamProcRawData : process(aclk)
@@ -1671,6 +2030,11 @@ begin
   			address_hadmard_raw_int_r <= 0;
   			m_axis_dout_tvalid_r   <= '0';
   			m_axis_dout_tvalid_rr  <= '0';
+  			
+  			-- to support av minus b proc
+  			address_av_minus_b_raw_int_r <= 0;
+  			s_axis_AV_data_tvalid_r  <= '0';
+  			s_axis_AV_data_tvalid_rr <= '0';
   	 
   	elsif( aclk'event and aclk = '1') then
   		  wr_2_mem_r       <= wr_2_mem;
@@ -1684,6 +2048,11 @@ begin
   		  address_hadmard_raw_int_r <= address_hadmard_raw_int;
   		  m_axis_dout_tvalid_r   <= m_axis_dout_tvalid;
   		  m_axis_dout_tvalid_rr  <= m_axis_dout_tvalid_r ;
+  		  
+  		  -- to support av minus b proc
+  			address_av_minus_b_raw_int_r <= address_av_minus_b_raw_int;
+  			s_axis_AV_data_tvalid_r  <= s_axis_AV_data_tvalid;
+  			s_axis_AV_data_tvalid_rr <= s_axis_AV_data_tvalid_r;
   	
     end if;
   end process del_wr_registers;	
@@ -1742,9 +2111,45 @@ begin
       s_axis_V_hadmard_data_tvalid_r <= s_axis_H_hadmard_data_tvalid;
     end if;
   end process ext_valid;
+  
+   -----------------------------------------------------------------------
+  -- Store AV-b outputs to memory; We are reading an array built by  process record_outputs
+  -----------------------------------------------------------------------
+  RamProcRawAVminusbData : process(aclk)
+  	
+  begin
+  	if rising_edge(aclk) then
+  		if aresetn = '0' then
+  			data_in_wr_2_mem <= (Others => '0'); -- don't care
+  		elsif s_axis_AV_data_tvalid_rr = '1' then 		
+  			av_minus_b_raw_mem(line_wr_2_mem,address_av_minus_b_raw_int_r) <= op_av_minus_b_data_rr_im & op_av_minus_b_data_rr_re; 
+  				  
+  		end if; -- wr mem
+    end if; --aclk
+   end process RamProcRawAVminusbData;
+  -----------------------------------------------------------------------
+  -- Calculate Adr to Store AV-b outputs to memory; 
+  -----------------------------------------------------------------------
+  RamProcRawAVminusbAdr : process(aclk)
+  begin
+  	if rising_edge(aclk) then
+  		if aresetn = '0' then
+  			op_sample_wr_2_av_minus_b_raw_mem    <= 0;
+  			address_av_minus_b_raw_int           <= 0;
+  			
+  		elsif s_axis_AV_data_tvalid_r = '1' then 		
+  			address_av_minus_b_raw_int <= op_sample_wr_2_av_minus_b_raw_mem;				
+  			op_sample_wr_2_av_minus_b_raw_mem <= op_sample_wr_2_av_minus_b_raw_mem + 1;
+  			
+  		elsif lst_wr_2_mem_rr = '1' then 	
+  			op_sample_wr_2_av_minus_b_raw_mem <= 0;
+ 
+  		end if; -- wr mem
+    end if; --aclk
+   end process RamProcRawAVminusbAdr;
     
   -----------------------------------------------------------------------
-  -- Record outputs, to use later as inputs for another frame
+  -- Record  FFT outputs, to use later as inputs for another frame
   -----------------------------------------------------------------------
 
   record_outputs : process (aclk)
@@ -1793,6 +2198,31 @@ begin
       end if;
     end if; -- aclk
   end process record_hadmard_outputs;
+  
+  -----------------------------------------------------------------------
+  -- Record Av-b outputs, to use later as inputs for another frame
+  -----------------------------------------------------------------------
+
+  record_AV_minus_b_outputs : process (aclk)
+  variable index : integer := 0;
+  begin
+    if rising_edge(aclk) then
+      if aresetn = '0' then  -- aresetn is active low
+        op_av_minus_b_data_re      <= (others=> '0');
+        op_av_minus_b_data_im      <= (others=> '0');
+      elsif s_axis_AV_data_tvalid = '1' then
+        op_av_minus_b_data_re <= av_minus_b_real(33 downto 0);
+        op_av_minus_b_data_im <= av_minus_b_imag(33 downto 0);
+      elsif lst_wr_2_mem = '1' then
+        op_av_minus_b_data_re  <= (others=>'0');
+        op_av_minus_b_data_im <= (others=>'0');
+      else -- is it okay to create a latch here ?
+        op_av_minus_b_data_re  <= op_av_minus_b_data_re;
+        op_av_minus_b_data_im <=  op_av_minus_b_data_im;
+        
+      end if;
+    end if; -- aclk
+  end process record_AV_minus_b_outputs;
 
   -----------------------------------------------------------------------
   -- Check outputs
