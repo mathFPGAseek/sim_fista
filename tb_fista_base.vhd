@@ -1998,7 +1998,7 @@ port map(
    end process RamProcRawAdr;
 
   -----------------------------------------------------------------------
-  -- Ancillary delays 
+  -- Ancillary delays .
   -----------------------------------------------------------------------
   del_wr_data : process(aclk)
     begin
@@ -2007,12 +2007,24 @@ port map(
         op_hadmard_data_rr_re  	<= (others => '0');
         op_hadmard_data_r_im	<= (others => '0');
         op_hadmard_data_rr_im  	<= (others => '0');
+        	
+        op_av_minus_b_data_r_re <= (others => '0');
+        op_av_minus_b_data_rr_re <= (others => '0');     	
+        op_av_minus_b_data_r_im <= (others => '0');
+        op_av_minus_b_data_rr_im <= (others => '0');
+        	
         
       elsif(aclk'event and aclk = '1') then
         op_hadmard_data_r_re	<= op_hadmard_data_re;
         op_hadmard_data_rr_re	<= op_hadmard_data_r_re;
         op_hadmard_data_r_im	<= op_hadmard_data_im;
         op_hadmard_data_rr_im	<= op_hadmard_data_r_im;
+        
+        op_av_minus_b_data_r_re <= op_av_minus_b_data_re;
+        op_av_minus_b_data_rr_re <= op_av_minus_b_data_r_re;     	
+        op_av_minus_b_data_r_im <= op_av_minus_b_data_im;
+        op_av_minus_b_data_rr_im <= op_av_minus_b_data_r_im;
+        	
       end if;
    end process del_wr_data;	
       
